@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef, type ChangeEvent } from 'react';
-import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
+import { Authenticator, useAuthenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
 import '@aws-amplify/ui-react/styles.css';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, downloadData } from 'aws-amplify/storage';
@@ -15,6 +15,69 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc as string;
 const client = generateClient<Schema>();
 
 const P = '#7B2882';
+
+// ── Auth theme ────────────────────────────────────────────────────────────────
+const authTheme = createTheme({
+  name: 'cv-manager',
+  tokens: {
+    colors: {
+      brand: {
+        primary: {
+          10: { value: '#F3E0F6' },
+          20: { value: '#E5BEF0' },
+          40: { value: '#C97FD6' },
+          60: { value: '#A040B0' },
+          80: { value: '#7B2882' },
+          90: { value: '#641E6A' },
+          100: { value: '#4E1652' },
+        },
+      },
+    },
+  },
+});
+
+const authFormFields = {
+  signIn: {
+    username: { label: 'Adresse email', placeholder: 'votre@email.com' },
+    password: { label: 'Mot de passe', placeholder: '••••••••' },
+  },
+  signUp: {
+    username: { label: 'Adresse email', placeholder: 'votre@email.com', order: 1 },
+    password: { label: 'Mot de passe', placeholder: '8 caractères minimum', order: 2 },
+    confirm_password: { label: 'Confirmer le mot de passe', placeholder: '••••••••', order: 3 },
+  },
+};
+
+const authComponents = {
+  Header() {
+    return (
+      <div style={{
+        background: `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`,
+        padding: '32px 28px 28px',
+        textAlign: 'center' as const,
+      }}>
+        <img
+          src="/logo-dn.png"
+          alt="Decision Network"
+          style={{ height: '42px', objectFit: 'contain' as const, filter: 'brightness(0) invert(1)', marginBottom: '14px', display: 'block', margin: '0 auto 14px' }}
+        />
+        <div style={{ color: 'white', fontSize: '20px', fontWeight: 700, letterSpacing: '-0.3px' }}>
+          CV Manager
+        </div>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', marginTop: '6px', letterSpacing: '1px', textTransform: 'uppercase' as const }}>
+          Decision Network — Accès sécurisé
+        </div>
+      </div>
+    );
+  },
+  Footer() {
+    return (
+      <div style={{ textAlign: 'center' as const, padding: '10px 16px 20px', color: '#bbb', fontSize: '11px' }}>
+        © 2026 Decision Network · Réservé aux collaborateurs
+      </div>
+    );
+  },
+};
 
 // ── Scale badge ───────────────────────────────────────────────────────────────
 function ScaleBadge({ scale }: { scale: number }) {
@@ -350,13 +413,54 @@ function AppContent() {
   );
 }
 
-// ── Root ──────────────────────────────────────────────────────────────────────
-export default function App() {
-  return (
-    <Authenticator>
+// ── Auth-aware layout ─────────────────────────────────────────────────────────
+function AuthLayout() {
+  const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+
+  if (authStatus === 'configuring') {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)` }}>
+        <div style={{ color: 'white', fontFamily: "'Inter', sans-serif", fontSize: '14px', opacity: 0.7 }}>Chargement…</div>
+      </div>
+    );
+  }
+
+  if (authStatus === 'authenticated') {
+    return (
       <ResumeProvider>
         <AppContent />
       </ResumeProvider>
-    </Authenticator>
+    );
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh',
+      background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)`,
+      display: 'flex',
+      flexDirection: 'column' as const,
+      alignItems: 'center',
+      justifyContent: 'center',
+      fontFamily: "'Inter', sans-serif",
+      padding: '24px',
+      position: 'relative' as const,
+      overflow: 'hidden',
+    }}>
+      {/* Decorative blobs */}
+      <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '420px', height: '420px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '-15%', left: '-8%', width: '520px', height: '520px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+      <Authenticator components={authComponents} formFields={authFormFields} />
+    </div>
+  );
+}
+
+// ── Root ──────────────────────────────────────────────────────────────────────
+export default function App() {
+  return (
+    <ThemeProvider theme={authTheme}>
+      <Authenticator.Provider>
+        <AuthLayout />
+      </Authenticator.Provider>
+    </ThemeProvider>
   );
 }

@@ -112,3 +112,89 @@ body {
     color-adjust: exact !important;
   }
 }
+
+/* ===== AMPLIFY AUTHENTICATOR OVERRIDES ===== */
+[data-amplify-router] {
+  border: none !important;
+  border-radius: 20px !important;
+  overflow: hidden;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.5) !important;
+  width: 420px !important;
+  max-width: calc(100vw - 32px) !important;
+  background: #fff !important;
+}
+
+[data-amplify-form] {
+  padding: 28px 32px 8px !important;
+}
+
+.amplify-label {
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  color: #4B5563 !important;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: 5px !important;
+}
+
+.amplify-input,
+.amplify-field-group__control {
+  border-radius: 10px !important;
+  font-size: 14px !important;
+  font-family: 'Inter', sans-serif !important;
+  border-color: #E5E7EB !important;
+  padding: 10px 14px !important;
+  transition: border-color 0.15s, box-shadow 0.15s !important;
+}
+.amplify-input:focus,
+.amplify-field-group__control:focus {
+  border-color: #7B2882 !important;
+  box-shadow: 0 0 0 3px rgba(123, 40, 130, 0.12) !important;
+}
+
+.amplify-button--primary {
+  border-radius: 10px !important;
+  font-weight: 600 !important;
+  font-size: 14px !important;
+  padding: 12px 24px !important;
+  letter-spacing: 0.2px;
+  transition: opacity 0.15s, transform 0.1s !important;
+}
+.amplify-button--primary:hover {
+  opacity: 0.9 !important;
+  transform: translateY(-1px) !important;
+}
+.amplify-button--primary:active {
+  transform: translateY(0) !important;
+}
+
+.amplify-button--link,
+.amplify-button--link:hover {
+  color: #7B2882 !important;
+  font-weight: 500 !important;
+}
+
+.amplify-tabs__item,
+.amplify-tabs-item {
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.amplify-field__show-password {
+  border-radius: 0 10px 10px 0 !important;
+}
+
+.amplify-alert--error {
+  border-radius: 10px !important;
+  font-size: 13px !important;
+}
+
+/* MFA / TOTP setup screen */
+.amplify-copy-button {
+  border-radius: 8px !important;
+}
+.amplify-qrcode {
+  border-radius: 12px;
+  overflow: hidden;
+}
