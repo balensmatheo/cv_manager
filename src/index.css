@@ -1,0 +1,114 @@
+@import "tailwindcss";
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background-color: #ddd;
+  font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+.cv-page {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  margin: 0 auto;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.22);
+  position: relative;
+}
+
+/* Edit mode ring */
+.cv-page.edit-active {
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.22), 0 0 0 3px #7B2882;
+}
+
+/* Editable text hover */
+[contenteditable="true"] {
+  outline: none;
+  border-bottom: 1.5px dashed rgba(123, 40, 130, 0.55) !important;
+  cursor: text;
+  min-width: 12px;
+  display: inline-block;
+  transition: background 0.15s;
+}
+[contenteditable="true"]:hover,
+[contenteditable="true"]:focus {
+  background: rgba(123, 40, 130, 0.06) !important;
+  border-radius: 2px;
+}
+
+/* Edit action buttons */
+.edit-btn-add,
+.edit-btn-remove {
+  opacity: 0;
+  transition: opacity 0.15s;
+  cursor: pointer;
+  border: none;
+  background: none;
+  padding: 0;
+  line-height: 1;
+}
+.edit-row:hover .edit-btn-add,
+.edit-row:hover .edit-btn-remove,
+.edit-section:hover .edit-btn-add {
+  opacity: 1;
+}
+
+/* ===== PRINT STYLES (A4 PDF) ===== */
+@media print {
+  @page {
+    size: A4;
+    margin: 0;
+  }
+
+  html, body {
+    width: 210mm;
+    background: white !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .no-print {
+    display: none !important;
+  }
+
+  /* Le zoom est appliqué en style inline par le handler beforeprint (JS).
+     Ici on se contente de neutraliser les styles écran. */
+  .cv-page {
+    width: 210mm !important;
+    min-height: unset !important;
+    height: auto !important;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Reset outer wrapper padding so cv-page starts at y=0 */
+  .cv-outer-wrapper {
+    padding: 0 !important;
+    background: white !important;
+    min-height: 0 !important;
+  }
+
+  .edit-btn-add,
+  .edit-btn-remove,
+  .edit-add-row {
+    display: none !important;
+  }
+
+  [contenteditable="true"] {
+    border-bottom: none !important;
+    background: transparent !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+}

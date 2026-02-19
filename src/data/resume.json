@@ -1,0 +1,64 @@
+{
+  "personal": {
+    "firstName": "Prénom",
+    "lastName": "NOM",
+    "title": "INTITULÉ DU POSTE",
+    "subtitle": "TECHNOLOGIE 1 / TECHNOLOGIE 2 / TECHNOLOGIE 3",
+    "website": "www.decision-network.eu",
+    "email": "prenom.nom@decision-network.eu",
+    "phone": "+33 6 XX XX XX XX",
+    "linkedin": "linkedin.com/in/prenom-nom",
+    "company": "Decision Network"
+  },
+  "sections": {
+    "summary": "ClipboardList",
+    "experiences": "Briefcase",
+    "profile": "User",
+    "skills": "Wrench",
+    "education": "GraduationCap"
+  },
+  "summary": [
+    "<b>Compétence clé 1</b>",
+    "<b>Compétence clé 2</b>",
+    "<b>Compétence clé 3</b>"
+  ],
+  "experiences": [
+    {
+      "id": "exemple-2024",
+      "title": "Intitulé du poste",
+      "client": "Nom du client",
+      "startDate": "Janvier 2024",
+      "endDate": "Aujourd'hui",
+      "missions": [
+        {
+          "id": "mission-exemple",
+          "name": "Nom de la mission ou du projet",
+          "tasks": [
+            "Description de la tâche 1",
+            "Description de la tâche 2",
+            "Description de la tâche 3"
+          ],
+          "tools": "Outil1, Outil2, Outil3"
+        }
+      ]
+    }
+  ],
+  "profileSkills": [
+    { "name": "COMPÉTENCE 1", "level": 3.5 },
+    { "name": "COMPÉTENCE 2", "level": 4 },
+    { "name": "COMPÉTENCE 3", "level": 3 }
+  ],
+  "skills": [
+    {
+      "name": "Technologie 1",
+      "details": "Détail de la compétence"
+    }
+  ],
+  "education": [
+    {
+      "years": "20XX – 20XX",
+      "degree": "Intitulé du diplôme",
+      "school": "Nom de l'école"
+    }
+  ]
+}
