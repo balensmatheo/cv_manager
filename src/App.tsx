@@ -1,83 +1,30 @@
 import { useEffect, useState, useCallback, useRef, type ChangeEvent } from 'react';
-import { Authenticator, useAuthenticator, ThemeProvider, createTheme } from '@aws-amplify/ui-react';
-import '@aws-amplify/ui-react/styles.css';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, downloadData } from 'aws-amplify/storage';
+import {
+  signOut as amplifySignOut,
+  getCurrentUser,
+  setUpTOTP,
+  verifyTOTPSetup,
+  updateMFAPreference,
+  fetchUserAttributes,
+} from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 import { ResumeProvider, useResume, type ResumeData } from './context/ResumeContext';
 import CV from './components/CV';
+import AuthPage from './components/AuthPage';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Schema } from '../amplify/data/resource';
+import QRCode from 'qrcode';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc as string;
 
 const client = generateClient<Schema>();
 
 const P = '#7B2882';
-
-// ── Auth theme ────────────────────────────────────────────────────────────────
-const authTheme = createTheme({
-  name: 'cv-manager',
-  tokens: {
-    colors: {
-      brand: {
-        primary: {
-          10: { value: '#F3E0F6' },
-          20: { value: '#E5BEF0' },
-          40: { value: '#C97FD6' },
-          60: { value: '#A040B0' },
-          80: { value: '#7B2882' },
-          90: { value: '#641E6A' },
-          100: { value: '#4E1652' },
-        },
-      },
-    },
-  },
-});
-
-const authFormFields = {
-  signIn: {
-    username: { label: 'Adresse email', placeholder: 'votre@email.com' },
-    password: { label: 'Mot de passe', placeholder: '••••••••' },
-  },
-  signUp: {
-    username: { label: 'Adresse email', placeholder: 'votre@email.com', order: 1 },
-    password: { label: 'Mot de passe', placeholder: '8 caractères minimum', order: 2 },
-    confirm_password: { label: 'Confirmer le mot de passe', placeholder: '••••••••', order: 3 },
-  },
-};
-
-const authComponents = {
-  Header() {
-    return (
-      <div style={{
-        background: `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`,
-        padding: '32px 28px 28px',
-        textAlign: 'center' as const,
-      }}>
-        <img
-          src="/logo-dn.png"
-          alt="Decision Network"
-          style={{ height: '42px', objectFit: 'contain' as const, filter: 'brightness(0) invert(1)', marginBottom: '14px', display: 'block', margin: '0 auto 14px' }}
-        />
-        <div style={{ color: 'white', fontSize: '20px', fontWeight: 700, letterSpacing: '-0.3px' }}>
-          CV Manager
-        </div>
-        <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', marginTop: '6px', letterSpacing: '1px', textTransform: 'uppercase' as const }}>
-          Decision Network — Accès sécurisé
-        </div>
-      </div>
-    );
-  },
-  Footer() {
-    return (
-      <div style={{ textAlign: 'center' as const, padding: '10px 16px 20px', color: '#bbb', fontSize: '11px' }}>
-        © 2026 Decision Network · Réservé aux collaborateurs
-      </div>
-    );
-  },
-};
+const GRAD = `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`;
 
 // ── Scale badge ───────────────────────────────────────────────────────────────
 function ScaleBadge({ scale }: { scale: number }) {
@@ -96,23 +43,189 @@ function ScaleBadge({ scale }: { scale: number }) {
   );
 }
 
+// ── TOTP Setup Modal ──────────────────────────────────────────────────────────
+function TotpModal({ onClose }: { onClose: () => void }) {
+  const [qrSrc, setQrSrc]       = useState('');
+  const [secret, setSecret]     = useState('');
+  const [code, setCode]         = useState('');
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState('');
+  const [done, setDone]         = useState(false);
+  const [focused, setFocused]   = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const setup = await setUpTOTP();
+        const attrs = await fetchUserAttributes();
+        const uri = setup.getSetupUri('CV Manager', attrs.email ?? '').toString();
+        const qr = await QRCode.toDataURL(uri, {
+          width: 180, margin: 1,
+          color: { dark: '#3D0A4E', light: '#ffffff' },
+        });
+        setQrSrc(qr);
+        setSecret(setup.sharedSecret);
+      } catch {
+        setError('Impossible de générer la configuration 2FA');
+      }
+    })();
+  }, []);
+
+  const handleVerify = async () => {
+    setLoading(true); setError('');
+    try {
+      await verifyTOTPSetup({ code });
+      await updateMFAPreference({ totp: 'PREFERRED' });
+      setDone(true);
+    } catch {
+      setError('Code invalide ou expiré');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 1000,
+      background: 'rgba(0,0,0,0.55)', backdropFilter: 'blur(4px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Inter', sans-serif",
+    }} onClick={e => { if (e.target === e.currentTarget) onClose(); }}>
+      <div style={{
+        background: 'white', borderRadius: '20px', overflow: 'hidden',
+        width: '380px', maxWidth: 'calc(100vw - 32px)',
+        boxShadow: '0 24px 60px rgba(0,0,0,0.35)',
+      }}>
+        {/* Header */}
+        <div style={{ background: GRAD, padding: '22px 24px 18px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <div style={{ color: 'white', fontWeight: 700, fontSize: '16px' }}>
+              🔐 Authentification 2FA
+            </div>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: '11px', marginTop: '3px', letterSpacing: '0.5px' }}>
+              TOTP — Google Authenticator / Authy
+            </div>
+          </div>
+          <button onClick={onClose} style={{
+            background: 'rgba(255,255,255,0.15)', border: 'none', color: 'white',
+            width: '28px', height: '28px', borderRadius: '50%', cursor: 'pointer',
+            fontSize: '14px', display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>✕</button>
+        </div>
+
+        {/* Body */}
+        <div style={{ padding: '22px 24px 8px' }}>
+          {done ? (
+            <div style={{ textAlign: 'center' as const, padding: '16px 0 8px' }}>
+              <div style={{ fontSize: '40px', marginBottom: '12px' }}>✅</div>
+              <div style={{ fontWeight: 700, fontSize: '16px', color: '#111827', marginBottom: '6px' }}>
+                2FA activé avec succès
+              </div>
+              <p style={{ fontSize: '13px', color: '#6B7280', margin: '0 0 20px', lineHeight: '1.6' }}>
+                Votre compte est maintenant protégé par l'authentification à deux facteurs.
+                Le code sera demandé à chaque connexion.
+              </p>
+              <button onClick={onClose} style={{
+                padding: '10px 28px', background: GRAD, color: 'white',
+                border: 'none', borderRadius: '10px', fontWeight: 600,
+                fontSize: '14px', cursor: 'pointer', fontFamily: 'inherit',
+              }}>
+                Fermer
+              </button>
+            </div>
+          ) : (
+            <>
+              {error && (
+                <div style={{
+                  background: '#FEF2F2', border: '1px solid #FECACA', borderRadius: '8px',
+                  padding: '10px 14px', fontSize: '13px', color: '#DC2626', marginBottom: '16px',
+                }}>
+                  {error}
+                </div>
+              )}
+              <p style={{ margin: '0 0 14px', fontSize: '13px', color: '#6B7280', lineHeight: '1.6' }}>
+                Scannez ce QR code avec{' '}
+                <strong style={{ color: '#374151' }}>Google Authenticator</strong> ou{' '}
+                <strong style={{ color: '#374151' }}>Authy</strong>, puis entrez le code généré.
+              </p>
+              {qrSrc ? (
+                <div style={{ textAlign: 'center' as const, marginBottom: '14px' }}>
+                  <img src={qrSrc} alt="QR Code 2FA" style={{ borderRadius: '12px', border: '4px solid #F3F4F6' }} />
+                </div>
+              ) : !error && (
+                <div style={{ height: '188px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9CA3AF', fontSize: '13px' }}>
+                  Génération du QR code…
+                </div>
+              )}
+              <details style={{ marginBottom: '14px' }}>
+                <summary style={{ fontSize: '12px', color: '#9CA3AF', cursor: 'pointer', userSelect: 'none' as const }}>
+                  Saisie manuelle du secret
+                </summary>
+                <code style={{
+                  display: 'block', marginTop: '8px', padding: '10px 12px',
+                  background: '#F9FAFB', border: '1px solid #E5E7EB',
+                  borderRadius: '8px', fontSize: '12px',
+                  wordBreak: 'break-all' as const, color: '#374151',
+                }}>
+                  {secret || '…'}
+                </code>
+              </details>
+              <label style={{
+                display: 'block', fontSize: '11px', fontWeight: 700,
+                color: '#6B7280', letterSpacing: '0.6px',
+                textTransform: 'uppercase' as const, marginBottom: '5px',
+              }}>
+                Code de vérification
+              </label>
+              <input
+                type="text" value={code} placeholder="123456"
+                onChange={e => setCode(e.target.value)}
+                onFocus={() => setFocused(true)}
+                onBlur={() => setFocused(false)}
+                style={{
+                  display: 'block', width: '100%', padding: '11px 14px',
+                  borderRadius: '10px',
+                  border: `1.5px solid ${focused ? P : '#E5E7EB'}`,
+                  boxShadow: focused ? `0 0 0 3px rgba(123,40,130,0.12)` : 'none',
+                  fontSize: '14px', fontFamily: 'inherit', outline: 'none',
+                  color: '#111827', background: focused ? '#fff' : '#F9FAFB',
+                  boxSizing: 'border-box' as const, marginBottom: '10px',
+                }}
+              />
+              <button
+                onClick={() => { void handleVerify(); }}
+                disabled={loading || !qrSrc}
+                style={{
+                  display: 'block', width: '100%', padding: '12px',
+                  background: loading || !qrSrc ? '#C8A0D0' : GRAD,
+                  color: 'white', border: 'none', borderRadius: '10px',
+                  fontSize: '14px', fontWeight: 700, fontFamily: 'inherit',
+                  cursor: loading || !qrSrc ? 'not-allowed' : 'pointer',
+                  boxShadow: '0 4px 14px rgba(123,40,130,0.3)',
+                }}
+              >
+                {loading ? '…' : 'Activer la 2FA →'}
+              </button>
+            </>
+          )}
+        </div>
+        <div style={{ height: '20px' }} />
+      </div>
+    </div>
+  );
+}
+
 // ── Toolbar ───────────────────────────────────────────────────────────────────
 function Toolbar({
-  printScale,
-  onPrint,
-  onSave,
-  saveLoading,
-  signOut,
+  printScale, onPrint, onSave, saveLoading, signOut, onSetupTotp,
 }: {
-  printScale: number;
-  onPrint: () => void;
-  onSave: () => void;
-  saveLoading: boolean;
-  signOut: () => void;
+  printScale: number; onPrint: () => void;
+  onSave: () => void; saveLoading: boolean;
+  signOut: () => void; onSetupTotp: () => void;
 }) {
   const { editMode, setEditMode, downloadJSON, resetData, loadData } = useResume();
   const fileRef = useRef<HTMLInputElement>(null);
-  const pdfRef = useRef<HTMLInputElement>(null);
+  const pdfRef  = useRef<HTMLInputElement>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
 
   const handlePdfImport = async (e: ChangeEvent<HTMLInputElement>) => {
@@ -125,16 +238,18 @@ function Toolbar({
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       const pageTexts: string[] = [];
       for (let i = 1; i <= pdf.numPages; i++) {
-        const page = await pdf.getPage(i);
+        const page    = await pdf.getPage(i);
         const content = await page.getTextContent();
         pageTexts.push(
-          content.items.filter((item): item is TextItem => 'str' in item).map((item) => item.str).join(' ')
+          content.items
+            .filter((item): item is TextItem => 'str' in item)
+            .map(item => item.str)
+            .join(' ')
         );
       }
       const { data: result, errors } = await client.queries.parsePdf({ pdfText: pageTexts.join('\n\n') });
       if (errors?.length) throw new Error(errors[0].message);
-      const parsed = JSON.parse(result!) as ResumeData;
-      loadData(parsed);
+      loadData(JSON.parse(result!) as ResumeData);
     } catch (err) {
       alert(`Erreur import PDF : ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
     } finally {
@@ -146,30 +261,47 @@ function Toolbar({
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = (ev) => {
-      try {
-        const parsed = JSON.parse(ev.target?.result as string) as ResumeData;
-        loadData(parsed);
-      } catch {
-        alert('Fichier JSON invalide');
-      }
+    reader.onload = ev => {
+      try { loadData(JSON.parse(ev.target?.result as string) as ResumeData); }
+      catch { alert('Fichier JSON invalide'); }
     };
     reader.readAsText(file);
     e.target.value = '';
   };
 
+  const btn = (label: string, onClick: () => void, opts?: {
+    white?: boolean; disabled?: boolean; title?: string;
+  }) => (
+    <button
+      onClick={onClick} disabled={opts?.disabled} title={opts?.title}
+      style={{
+        background: opts?.white ? 'white' : 'rgba(255,255,255,0.15)',
+        color: opts?.white ? P : 'white',
+        border: opts?.white ? 'none' : '1px solid rgba(255,255,255,0.4)',
+        padding: '7px 14px', borderRadius: '8px',
+        fontWeight: 600, fontSize: '13px', cursor: opts?.disabled ? 'wait' : 'pointer',
+        fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '5px',
+        boxShadow: opts?.white ? '0 2px 6px rgba(0,0,0,0.12)' : 'none',
+        opacity: opts?.disabled ? 0.65 : 1,
+        whiteSpace: 'nowrap' as const,
+      }}
+    >
+      {label}
+    </button>
+  );
+
   return (
     <div className="no-print" style={{
       position: 'fixed', top: 0, left: 0, right: 0, zIndex: 200,
-      background: `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`,
-      color: 'white',
+      background: GRAD, color: 'white',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-      padding: '0 24px', height: '52px',
+      padding: '0 20px', height: '52px',
       boxShadow: '0 2px 12px rgba(0,0,0,0.25)',
       fontFamily: "'Inter', sans-serif",
     }}>
+      {/* Left */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <img src="/logo-dn.png" alt="" style={{ height: '30px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
+        <img src="/logo-dn.png" alt="" style={{ height: '28px', objectFit: 'contain', filter: 'brightness(0) invert(1)' }} />
         <span style={{ fontWeight: 600, fontSize: '14px', opacity: 0.9 }}>CV Manager</span>
         {editMode && (
           <span style={{ background: 'rgba(255,255,255,0.2)', borderRadius: '12px', padding: '2px 10px', fontSize: '11px', fontWeight: 600 }}>
@@ -179,124 +311,75 @@ function Toolbar({
         <ScaleBadge scale={printScale} />
       </div>
 
-      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+      {/* Right */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <button onClick={() => setEditMode(!editMode)} style={{
           background: editMode ? 'white' : 'rgba(255,255,255,0.15)',
           color: editMode ? P : 'white',
           border: editMode ? 'none' : '1px solid rgba(255,255,255,0.4)',
-          padding: '7px 16px', borderRadius: '8px',
-          fontWeight: 600, fontSize: '13px', cursor: 'pointer',
-          fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px',
-        }}>
-          {editMode ? '✅ Terminer' : '✏️ Modifier le CV'}
-        </button>
-
-        <button onClick={onPrint} style={{
-          background: 'white', color: P,
-          border: 'none', padding: '7px 16px', borderRadius: '8px',
-          fontWeight: 600, fontSize: '13px', cursor: 'pointer',
-          fontFamily: 'inherit', display: 'flex', alignItems: 'center', gap: '6px',
-          boxShadow: '0 2px 6px rgba(0,0,0,0.12)',
-        }}>
-          📄 PDF
-        </button>
-
-        <button onClick={onSave} disabled={saveLoading} title="Sauvegarder sur le cloud" style={{
-          background: 'rgba(255,255,255,0.15)', color: 'white',
-          border: '1px solid rgba(255,255,255,0.4)',
           padding: '7px 14px', borderRadius: '8px',
-          fontSize: '13px', cursor: saveLoading ? 'wait' : 'pointer',
-          fontFamily: 'inherit', opacity: saveLoading ? 0.65 : 1,
+          fontWeight: 600, fontSize: '13px', cursor: 'pointer',
+          fontFamily: 'inherit',
         }}>
-          {saveLoading ? '⏳ Sauvegarde…' : '💾 Sauvegarder'}
+          {editMode ? '✅ Terminer' : '✏️ Modifier'}
         </button>
 
-        <button onClick={downloadJSON} title="Télécharger resume.json" style={{
-          background: 'rgba(255,255,255,0.15)', color: 'white',
-          border: '1px solid rgba(255,255,255,0.4)',
-          padding: '7px 12px', borderRadius: '8px',
-          fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          ⬇ JSON
-        </button>
+        {btn('📄 PDF', onPrint, { white: true })}
+        {btn(saveLoading ? '⏳…' : '💾 Sauvegarder', onSave, { disabled: saveLoading })}
+        {btn('⬇ JSON', downloadJSON)}
 
         <input ref={fileRef} type="file" accept=".json" style={{ display: 'none' }} onChange={handleImport} />
-        <button onClick={() => fileRef.current?.click()} title="Importer un resume.json" style={{
-          background: 'rgba(255,255,255,0.15)', color: 'white',
-          border: '1px solid rgba(255,255,255,0.4)',
-          padding: '7px 12px', borderRadius: '8px',
-          fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          ⬆ JSON
-        </button>
+        {btn('⬆ JSON', () => fileRef.current?.click())}
 
         <input ref={pdfRef} type="file" accept=".pdf" style={{ display: 'none' }}
-          onChange={(e) => { void handlePdfImport(e); }} />
-        <button onClick={() => pdfRef.current?.click()} disabled={pdfLoading}
-          title="Importer un CV PDF" style={{
-            background: 'rgba(255,255,255,0.15)', color: 'white',
-            border: '1px solid rgba(255,255,255,0.4)',
-            padding: '7px 12px', borderRadius: '8px',
-            fontSize: '13px', cursor: pdfLoading ? 'wait' : 'pointer',
-            fontFamily: 'inherit', opacity: pdfLoading ? 0.65 : 1,
-          }}>
-          {pdfLoading ? '⏳ Analyse…' : '⬆ PDF'}
-        </button>
+          onChange={e => { void handlePdfImport(e); }} />
+        {btn(pdfLoading ? '⏳ Analyse…' : '⬆ PDF', () => pdfRef.current?.click(), { disabled: pdfLoading })}
 
-        <button onClick={resetData} title="Réinitialiser les données" style={{
-          background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)',
+        {btn('🔐 2FA', onSetupTotp, { title: 'Configurer l\'authentification 2FA' })}
+
+        <button onClick={resetData} title="Réinitialiser" style={{
+          background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.65)',
           border: '1px solid rgba(255,255,255,0.2)',
           padding: '7px 10px', borderRadius: '8px',
           fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          ↺
-        </button>
+        }}>↺</button>
 
         <button onClick={signOut} title="Se déconnecter" style={{
-          background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)',
+          background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.65)',
           border: '1px solid rgba(255,255,255,0.2)',
           padding: '7px 12px', borderRadius: '8px',
           fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
-        }}>
-          ⬪ Déconnexion
-        </button>
+        }}>⬪ Déco</button>
       </div>
     </div>
   );
 }
 
-// ── Helpers de scaling ────────────────────────────────────────────────────────
+// ── Scale helpers ─────────────────────────────────────────────────────────────
 function getElements() {
   return {
-    page: document.querySelector('.cv-page') as HTMLElement | null,
+    page:    document.querySelector('.cv-page') as HTMLElement | null,
     wrapper: document.getElementById('cv-wrapper') as HTMLElement | null,
   };
 }
-
 function applyScale() {
   const { page, wrapper } = getElements();
   if (!page || !wrapper) return 1;
-
   page.style.removeProperty('transform');
   page.style.removeProperty('transform-origin');
   wrapper.style.removeProperty('height');
   wrapper.style.removeProperty('overflow');
   void page.offsetHeight;
-
   const a4H = page.offsetWidth * (297 / 210);
   const contentH = page.scrollHeight;
-
   if (contentH <= a4H) return 1;
-
   const s = (a4H * 0.97) / contentH;
   page.style.transform = `scale(${s})`;
   page.style.transformOrigin = 'top center';
   wrapper.style.height = `${contentH * s}px`;
   wrapper.style.overflow = 'hidden';
-
   return s;
 }
-
 function resetScale() {
   const { page, wrapper } = getElements();
   page?.style.removeProperty('transform');
@@ -305,31 +388,25 @@ function resetScale() {
 }
 
 // ── AppContent ────────────────────────────────────────────────────────────────
-function AppContent() {
+function AppContent({ onSignOut }: { onSignOut: () => void }) {
   const { data, loadData } = useResume();
-  const { signOut } = useAuthenticator();
   const [printScale, setPrintScale] = useState(1);
   const [saveLoading, setSaveLoading] = useState(false);
   const [cloudLoaded, setCloudLoaded] = useState(false);
+  const [totpOpen, setTotpOpen] = useState(false);
 
-  // Auto-load depuis S3 au premier montage (après auth)
   useEffect(() => {
     let cancelled = false;
-    async function loadFromS3() {
+    void (async () => {
       try {
         const res = await downloadData({
           path: ({ identityId }) => `private/${identityId}/resume.json`,
         }).result;
         if (cancelled) return;
-        const text = await res.body.text();
-        loadData(JSON.parse(text) as ResumeData);
-      } catch {
-        // Pas de fichier S3 → conserver les données localStorage/défaut
-      } finally {
-        if (!cancelled) setCloudLoaded(true);
-      }
-    }
-    void loadFromS3();
+        loadData(JSON.parse(await res.body.text()) as ResumeData);
+      } catch { /* no S3 file → keep defaults */ }
+      finally { if (!cancelled) setCloudLoaded(true); }
+    })();
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -349,7 +426,6 @@ function AppContent() {
     }
   }, [data]);
 
-  // Badge live
   const updateBadge = useCallback(() => {
     const page = document.querySelector('.cv-page') as HTMLElement | null;
     if (!page) return;
@@ -368,7 +444,7 @@ function AppContent() {
 
   useEffect(() => {
     const before = () => applyScale();
-    const after = () => { resetScale(); updateBadge(); };
+    const after  = () => { resetScale(); updateBadge(); };
     window.addEventListener('beforeprint', before);
     window.addEventListener('afterprint', after);
     return () => {
@@ -388,7 +464,7 @@ function AppContent() {
       <div style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         minHeight: '100vh', background: '#ddd',
-        fontFamily: "'Inter', sans-serif", fontSize: '16px', color: '#555',
+        fontFamily: "'Inter', sans-serif", fontSize: '15px', color: '#666',
       }}>
         Chargement du CV…
       </div>
@@ -397,38 +473,64 @@ function AppContent() {
 
   return (
     <>
+      {totpOpen && <TotpModal onClose={() => setTotpOpen(false)} />}
       <Toolbar
         printScale={printScale}
         onPrint={handlePrint}
         onSave={() => { void handleSave(); }}
         saveLoading={saveLoading}
-        signOut={signOut}
+        signOut={onSignOut}
+        onSetupTotp={() => setTotpOpen(true)}
       />
-      <div className="cv-outer-wrapper" style={{ paddingTop: '68px', paddingBottom: '40px', minHeight: '100vh', background: '#ddd' }}>
-        <div id="cv-wrapper">
-          <CV />
-        </div>
+      <div className="cv-outer-wrapper" style={{
+        paddingTop: '68px', paddingBottom: '40px',
+        minHeight: '100vh', background: '#ddd',
+      }}>
+        <div id="cv-wrapper"><CV /></div>
       </div>
     </>
   );
 }
 
 // ── Auth-aware layout ─────────────────────────────────────────────────────────
-function AuthLayout() {
-  const { authStatus } = useAuthenticator((ctx) => [ctx.authStatus]);
+type AuthState = 'loading' | 'authenticated' | 'unauthenticated';
 
-  if (authStatus === 'configuring') {
+function AuthLayout() {
+  const [authState, setAuthState] = useState<AuthState>('loading');
+
+  useEffect(() => {
+    getCurrentUser()
+      .then(() => setAuthState('authenticated'))
+      .catch(() => setAuthState('unauthenticated'));
+
+    const unsub = Hub.listen('auth', ({ payload }) => {
+      if (payload.event === 'signedIn')  setAuthState('authenticated');
+      if (payload.event === 'signedOut') setAuthState('unauthenticated');
+    });
+    return unsub;
+  }, []);
+
+  const handleSignOut = useCallback(() => {
+    void amplifySignOut().then(() => setAuthState('unauthenticated'));
+  }, []);
+
+  if (authState === 'loading') {
     return (
-      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)` }}>
-        <div style={{ color: 'white', fontFamily: "'Inter', sans-serif", fontSize: '14px', opacity: 0.7 }}>Chargement…</div>
+      <div style={{
+        minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)`,
+      }}>
+        <div style={{ color: 'rgba(255,255,255,0.6)', fontFamily: "'Inter', sans-serif", fontSize: '14px' }}>
+          Chargement…
+        </div>
       </div>
     );
   }
 
-  if (authStatus === 'authenticated') {
+  if (authState === 'authenticated') {
     return (
       <ResumeProvider>
-        <AppContent />
+        <AppContent onSignOut={handleSignOut} />
       </ResumeProvider>
     );
   }
@@ -437,30 +539,19 @@ function AuthLayout() {
     <div style={{
       minHeight: '100vh',
       background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)`,
-      display: 'flex',
-      flexDirection: 'column' as const,
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontFamily: "'Inter', sans-serif",
-      padding: '24px',
-      position: 'relative' as const,
-      overflow: 'hidden',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      fontFamily: "'Inter', sans-serif", padding: '24px',
+      position: 'relative' as const, overflow: 'hidden',
     }}>
       {/* Decorative blobs */}
-      <div style={{ position: 'absolute', top: '-10%', right: '-5%', width: '420px', height: '420px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
-      <div style={{ position: 'absolute', bottom: '-15%', left: '-8%', width: '520px', height: '520px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
-      <Authenticator components={authComponents} formFields={authFormFields} />
+      <div style={{ position: 'absolute', top: '-8%', right: '-4%', width: '420px', height: '420px', borderRadius: '50%', background: 'rgba(255,255,255,0.04)', pointerEvents: 'none' }} />
+      <div style={{ position: 'absolute', bottom: '-12%', left: '-6%', width: '520px', height: '520px', borderRadius: '50%', background: 'rgba(255,255,255,0.03)', pointerEvents: 'none' }} />
+      <AuthPage onAuthenticated={() => setAuthState('authenticated')} />
     </div>
   );
 }
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
-  return (
-    <ThemeProvider theme={authTheme}>
-      <Authenticator.Provider>
-        <AuthLayout />
-      </Authenticator.Provider>
-    </ThemeProvider>
-  );
+  return <AuthLayout />;
 }
