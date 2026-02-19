@@ -1,6 +1,18 @@
 import { useEffect, useState, useCallback, useRef, type ChangeEvent } from 'react';
+import { Authenticator, useAuthenticator } from '@aws-amplify/ui-react';
+import '@aws-amplify/ui-react/styles.css';
+import { generateClient } from 'aws-amplify/data';
+import { uploadData, downloadData } from 'aws-amplify/storage';
 import { ResumeProvider, useResume, type ResumeData } from './context/ResumeContext';
 import CV from './components/CV';
+import * as pdfjsLib from 'pdfjs-dist';
+import type { TextItem } from 'pdfjs-dist/types/src/display/api';
+import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import type { Schema } from '../amplify/data/resource';
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc as string;
+
+const client = generateClient<Schema>();
 
 const P = '#7B2882';
 
@@ -22,9 +34,50 @@ function ScaleBadge({ scale }: { scale: number }) {
 }
 
 // ── Toolbar ───────────────────────────────────────────────────────────────────
-function Toolbar({ printScale, onPrint }: { printScale: number; onPrint: () => void }) {
+function Toolbar({
+  printScale,
+  onPrint,
+  onSave,
+  saveLoading,
+  signOut,
+}: {
+  printScale: number;
+  onPrint: () => void;
+  onSave: () => void;
+  saveLoading: boolean;
+  signOut: () => void;
+}) {
   const { editMode, setEditMode, downloadJSON, resetData, loadData } = useResume();
   const fileRef = useRef<HTMLInputElement>(null);
+  const pdfRef = useRef<HTMLInputElement>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
+
+  const handlePdfImport = async (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setPdfLoading(true);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      const pageTexts: string[] = [];
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        pageTexts.push(
+          content.items.filter((item): item is TextItem => 'str' in item).map((item) => item.str).join(' ')
+        );
+      }
+      const { data: result, errors } = await client.queries.parsePdf({ pdfText: pageTexts.join('\n\n') });
+      if (errors?.length) throw new Error(errors[0].message);
+      const parsed = JSON.parse(result!) as ResumeData;
+      loadData(parsed);
+    } catch (err) {
+      alert(`Erreur import PDF : ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+    } finally {
+      setPdfLoading(false);
+    }
+  };
 
   const handleImport = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -85,6 +138,16 @@ function Toolbar({ printScale, onPrint }: { printScale: number; onPrint: () => v
           📄 PDF
         </button>
 
+        <button onClick={onSave} disabled={saveLoading} title="Sauvegarder sur le cloud" style={{
+          background: 'rgba(255,255,255,0.15)', color: 'white',
+          border: '1px solid rgba(255,255,255,0.4)',
+          padding: '7px 14px', borderRadius: '8px',
+          fontSize: '13px', cursor: saveLoading ? 'wait' : 'pointer',
+          fontFamily: 'inherit', opacity: saveLoading ? 0.65 : 1,
+        }}>
+          {saveLoading ? '⏳ Sauvegarde…' : '💾 Sauvegarder'}
+        </button>
+
         <button onClick={downloadJSON} title="Télécharger resume.json" style={{
           background: 'rgba(255,255,255,0.15)', color: 'white',
           border: '1px solid rgba(255,255,255,0.4)',
@@ -104,6 +167,19 @@ function Toolbar({ printScale, onPrint }: { printScale: number; onPrint: () => v
           ⬆ JSON
         </button>
 
+        <input ref={pdfRef} type="file" accept=".pdf" style={{ display: 'none' }}
+          onChange={(e) => { void handlePdfImport(e); }} />
+        <button onClick={() => pdfRef.current?.click()} disabled={pdfLoading}
+          title="Importer un CV PDF" style={{
+            background: 'rgba(255,255,255,0.15)', color: 'white',
+            border: '1px solid rgba(255,255,255,0.4)',
+            padding: '7px 12px', borderRadius: '8px',
+            fontSize: '13px', cursor: pdfLoading ? 'wait' : 'pointer',
+            fontFamily: 'inherit', opacity: pdfLoading ? 0.65 : 1,
+          }}>
+          {pdfLoading ? '⏳ Analyse…' : '⬆ PDF'}
+        </button>
+
         <button onClick={resetData} title="Réinitialiser les données" style={{
           background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)',
           border: '1px solid rgba(255,255,255,0.2)',
@@ -112,15 +188,21 @@ function Toolbar({ printScale, onPrint }: { printScale: number; onPrint: () => v
         }}>
           ↺
         </button>
+
+        <button onClick={signOut} title="Se déconnecter" style={{
+          background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.7)',
+          border: '1px solid rgba(255,255,255,0.2)',
+          padding: '7px 12px', borderRadius: '8px',
+          fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
+        }}>
+          ⬪ Déconnexion
+        </button>
       </div>
     </div>
   );
 }
 
 // ── Helpers de scaling ────────────────────────────────────────────────────────
-// transform: scale() ne change PAS la largeur de layout → pas de reflow de texte.
-// Le wrapper contrôle la hauteur de pagination (= a4H), overflow: hidden coupe le reste.
-
 function getElements() {
   return {
     page: document.querySelector('.cv-page') as HTMLElement | null,
@@ -132,23 +214,20 @@ function applyScale() {
   const { page, wrapper } = getElements();
   if (!page || !wrapper) return 1;
 
-  // Réinitialise d'abord pour mesurer la hauteur naturelle
   page.style.removeProperty('transform');
   page.style.removeProperty('transform-origin');
   wrapper.style.removeProperty('height');
   wrapper.style.removeProperty('overflow');
-  void page.offsetHeight; // force reflow
+  void page.offsetHeight;
 
-  const a4H = page.offsetWidth * (297 / 210); // 297mm en px relatif à la largeur A4
-  const contentH = page.scrollHeight;          // hauteur réelle du contenu
+  const a4H = page.offsetWidth * (297 / 210);
+  const contentH = page.scrollHeight;
 
   if (contentH <= a4H) return 1;
 
-  // transform: scale préserve la largeur CSS → le texte ne se rewrap PAS
   const s = (a4H * 0.97) / contentH;
   page.style.transform = `scale(${s})`;
   page.style.transformOrigin = 'top center';
-  // Le wrapper contrôle la pagination : le browser voit contentH*s < a4H
   wrapper.style.height = `${contentH * s}px`;
   wrapper.style.overflow = 'hidden';
 
@@ -164,10 +243,50 @@ function resetScale() {
 
 // ── AppContent ────────────────────────────────────────────────────────────────
 function AppContent() {
-  const { data } = useResume();
+  const { data, loadData } = useResume();
+  const { signOut } = useAuthenticator();
   const [printScale, setPrintScale] = useState(1);
+  const [saveLoading, setSaveLoading] = useState(false);
+  const [cloudLoaded, setCloudLoaded] = useState(false);
 
-  // Badge live (mesure sans toucher au transform)
+  // Auto-load depuis S3 au premier montage (après auth)
+  useEffect(() => {
+    let cancelled = false;
+    async function loadFromS3() {
+      try {
+        const res = await downloadData({
+          path: ({ identityId }) => `private/${identityId}/resume.json`,
+        }).result;
+        if (cancelled) return;
+        const text = await res.body.text();
+        loadData(JSON.parse(text) as ResumeData);
+      } catch {
+        // Pas de fichier S3 → conserver les données localStorage/défaut
+      } finally {
+        if (!cancelled) setCloudLoaded(true);
+      }
+    }
+    void loadFromS3();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleSave = useCallback(async () => {
+    setSaveLoading(true);
+    try {
+      await uploadData({
+        path: ({ identityId }) => `private/${identityId}/resume.json`,
+        data: JSON.stringify(data, null, 2),
+        options: { contentType: 'application/json' },
+      }).result;
+      alert('CV sauvegardé !');
+    } catch (err) {
+      alert(`Erreur sauvegarde : ${err instanceof Error ? err.message : err}`);
+    } finally {
+      setSaveLoading(false);
+    }
+  }, [data]);
+
+  // Badge live
   const updateBadge = useCallback(() => {
     const page = document.querySelector('.cv-page') as HTMLElement | null;
     if (!page) return;
@@ -184,7 +303,6 @@ function AppContent() {
     return () => { clearTimeout(t); obs.disconnect(); };
   }, [data, updateBadge]);
 
-  // Ctrl+P : beforeprint/afterprint pour Ctrl+P natif
   useEffect(() => {
     const before = () => applyScale();
     const after = () => { resetScale(); updateBadge(); };
@@ -196,18 +314,34 @@ function AppContent() {
     };
   }, [updateBadge]);
 
-  // Bouton PDF : applique le scale puis déclenche l'impression
   const handlePrint = () => {
     applyScale();
-    void document.getElementById('cv-wrapper')?.offsetHeight; // flush
+    void document.getElementById('cv-wrapper')?.offsetHeight;
     setTimeout(() => window.print(), 60);
   };
 
+  if (!cloudLoaded) {
+    return (
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        minHeight: '100vh', background: '#ddd',
+        fontFamily: "'Inter', sans-serif", fontSize: '16px', color: '#555',
+      }}>
+        Chargement du CV…
+      </div>
+    );
+  }
+
   return (
     <>
-      <Toolbar printScale={printScale} onPrint={handlePrint} />
+      <Toolbar
+        printScale={printScale}
+        onPrint={handlePrint}
+        onSave={() => { void handleSave(); }}
+        saveLoading={saveLoading}
+        signOut={signOut}
+      />
       <div className="cv-outer-wrapper" style={{ paddingTop: '68px', paddingBottom: '40px', minHeight: '100vh', background: '#ddd' }}>
-        {/* cv-wrapper : height contrôlé par JS au moment de l'impression */}
         <div id="cv-wrapper">
           <CV />
         </div>
@@ -219,8 +353,10 @@ function AppContent() {
 // ── Root ──────────────────────────────────────────────────────────────────────
 export default function App() {
   return (
-    <ResumeProvider>
-      <AppContent />
-    </ResumeProvider>
+    <Authenticator>
+      <ResumeProvider>
+        <AppContent />
+      </ResumeProvider>
+    </Authenticator>
   );
 }
