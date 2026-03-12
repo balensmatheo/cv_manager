@@ -16,7 +16,18 @@
     "user_verification_types": [
       "email"
     ],
-    "groups": [],
+    "groups": [
+      {
+        "admin": {
+          "precedence": 0
+        }
+      },
+      {
+        "user": {
+          "precedence": 1
+        }
+      }
+    ],
     "mfa_configuration": "OPTIONAL",
     "password_policy": {
       "min_length": 8,
@@ -48,6 +59,54 @@
           "arguments": {
             "pdfText": {
               "name": "pdfText",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            }
+          }
+        },
+        "getUsage": {
+          "name": "getUsage",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false
+        },
+        "listUsers": {
+          "name": "listUsers",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false
+        },
+        "getUserCv": {
+          "name": "getUserCv",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "username": {
+              "name": "username",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            }
+          }
+        }
+      },
+      "mutations": {
+        "promoteUser": {
+          "name": "promoteUser",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "username": {
+              "name": "username",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "group": {
+              "name": "group",
               "isArray": false,
               "type": "String",
               "isRequired": true

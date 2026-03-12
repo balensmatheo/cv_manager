@@ -1,8 +1,7 @@
 import { defineFunction } from '@aws-amplify/backend';
 
-export const parsePdfFunction = defineFunction({
-  name: 'parse-pdf',
+export const listUsersFunction = defineFunction({
+  name: 'list-users',
   entry: './handler.ts',
-  timeoutSeconds: 30,
   resourceGroupName: 'data',
 });

@@ -6,4 +6,5 @@ export const auth = defineAuth({
     mode: 'OPTIONAL',
     totp: true,
   },
+  groups: ['admin', 'user'],
 });

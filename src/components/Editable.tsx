@@ -1,5 +1,9 @@
 import React, { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
+import DOMPurify from 'dompurify';
 import { useResume } from '../context/ResumeContext';
+
+const sanitize = (html: string) =>
+  DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'u', 'strong', 'em', 'br', 'span'], ALLOWED_ATTR: ['style'] });
 
 // ── EditableText ──────────────────────────────────────────────────────────────
 // In view mode: renders HTML via dangerouslySetInnerHTML.
@@ -27,7 +31,7 @@ export function EditableText({ value, onChange, as: Tag = 'span', className, sty
   }, [value, editMode]);
 
   if (!editMode) {
-    return <Elem className={className} style={style} dangerouslySetInnerHTML={{ __html: value }} />;
+    return <Elem className={className} style={style} dangerouslySetInnerHTML={{ __html: sanitize(value) }} />;
   }
 
   return (

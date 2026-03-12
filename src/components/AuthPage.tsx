@@ -146,7 +146,7 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: () => v
 
   const handleStep = useCallback(async (step: string) => {
     if (step === 'DONE') { onAuthenticated(); return; }
-    if (step === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE') {
+    if (step === 'CONFIRM_SIGN_IN_WITH_TOTP_CODE' || step === 'CONFIRM_SIGN_IN_WITH_SOFTWARE_TOKEN_MFA_CODE') {
       setCode(''); setView('mfaVerify'); return;
     }
     if (step === 'CONTINUE_SIGN_IN_WITH_TOTP_SETUP') {
@@ -158,6 +158,15 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: () => v
       });
       setQrSrc(qr); setTotpSecret(setup.sharedSecret);
       setCode(''); setView('mfaSetup'); return;
+    }
+    if (step === 'CONTINUE_SIGN_IN_WITH_MFA_SELECTION') {
+      // Auto-select TOTP when MFA selection is required
+      const { nextStep } = await confirmSignIn({ challengeResponse: 'TOTP' });
+      await handleStep(nextStep.signInStep);
+      return;
+    }
+    if (step === 'CONFIRM_SIGN_UP') {
+      setCode(''); setView('confirmEmail'); return;
     }
     setError(`Étape non gérée : ${step}`);
   }, [email, onAuthenticated]);

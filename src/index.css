@@ -92,6 +92,10 @@ body {
     min-height: 0 !important;
   }
 
+  main {
+    margin-left: 0 !important;
+  }
+
   .edit-btn-add,
   .edit-btn-remove,
   .edit-add-row {
