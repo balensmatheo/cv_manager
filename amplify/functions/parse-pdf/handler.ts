@@ -1,4 +1,3 @@
-import type { Schema } from '../../data/resource';
 import Anthropic from '@anthropic-ai/sdk';
 
 const SYSTEM_PROMPT = `Tu es un expert en parsing de CV. Extrais les informations du texte fourni et retourne UNIQUEMENT un objet JSON brut (sans markdown, sans explication, sans balises de code).
@@ -24,7 +23,7 @@ Règles :
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-export const handler: Schema['parsePdf']['functionHandler'] = async (event) => {
+export const handler = async (event: { arguments: { pdfText: string } }): Promise<string> => {
   const pdfText = event.arguments.pdfText;
   if (!pdfText?.trim()) throw new Error('pdfText vide');
 
