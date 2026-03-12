@@ -1,15 +1,23 @@
 {
-  "version": "1.3",
   "auth": {
-    "user_pool_id": "us-east-1_PLACEHOLDER",
-    "aws_region": "us-east-1",
-    "user_pool_client_id": "PLACEHOLDERPLACEHOLDERPLACEHOLDER",
-    "identity_pool_id": "us-east-1:00000000-0000-0000-0000-000000000000",
-    "mfa_methods": [],
-    "standard_required_attributes": ["email"],
-    "username_attributes": ["email"],
-    "user_verification_types": ["email"],
-    "mfa_configuration": "NONE",
+    "user_pool_id": "eu-west-1_KiDjT64TJ",
+    "aws_region": "eu-west-1",
+    "user_pool_client_id": "5006qjkcl6v4ccnt04he1lrj8u",
+    "identity_pool_id": "eu-west-1:e2036440-92d8-46f6-aa38-f3735cec67e1",
+    "mfa_methods": [
+      "TOTP"
+    ],
+    "standard_required_attributes": [
+      "email"
+    ],
+    "username_attributes": [
+      "email"
+    ],
+    "user_verification_types": [
+      "email"
+    ],
+    "groups": [],
+    "mfa_configuration": "OPTIONAL",
     "password_policy": {
       "min_length": 8,
       "require_lowercase": true,
@@ -17,26 +25,58 @@
       "require_symbols": true,
       "require_uppercase": true
     },
-    "unauthenticated_identities_enabled": false
+    "unauthenticated_identities_enabled": true
   },
   "data": {
-    "url": "https://placeholder.appsync-api.us-east-1.amazonaws.com/graphql",
-    "aws_region": "us-east-1",
-    "api_key": "",
+    "url": "https://7qrywf4vrjbjhn3mgdanynzdny.appsync-api.eu-west-1.amazonaws.com/graphql",
+    "aws_region": "eu-west-1",
     "default_authorization_type": "AMAZON_COGNITO_USER_POOLS",
-    "authorization_types": ["AMAZON_COGNITO_USER_POOLS"],
-    "model_introspection": { "version": 1, "models": {}, "enums": {}, "nonModels": {} }
+    "authorization_types": [
+      "AWS_IAM"
+    ],
+    "model_introspection": {
+      "version": 1,
+      "models": {},
+      "enums": {},
+      "nonModels": {},
+      "queries": {
+        "parsePdf": {
+          "name": "parsePdf",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "pdfText": {
+              "name": "pdfText",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            }
+          }
+        }
+      }
+    }
   },
   "storage": {
-    "bucket_name": "cv-app-storage-placeholder",
-    "aws_region": "us-east-1",
-    "buckets": [{
-      "name": "cv-app-storage",
-      "bucket_name": "cv-app-storage-placeholder",
-      "aws_region": "us-east-1",
-      "paths": {
-        "private/{entity_id}/*": { "authenticated": ["get", "write", "delete"] }
+    "aws_region": "eu-west-1",
+    "bucket_name": "amplify-cvapp-mathe-sandb-cvappstoragebucket191577-dyys4wyrtudb",
+    "buckets": [
+      {
+        "name": "cv-app-storage",
+        "bucket_name": "amplify-cvapp-mathe-sandb-cvappstoragebucket191577-dyys4wyrtudb",
+        "aws_region": "eu-west-1",
+        "paths": {
+          "private/${cognito-identity.amazonaws.com:sub}/*": {
+            "entityidentity": [
+              "get",
+              "list",
+              "write",
+              "delete"
+            ]
+          }
+        }
       }
-    }]
-  }
+    ]
+  },
+  "version": "1.4"
 }
