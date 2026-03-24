@@ -1,82 +1,65 @@
 import { useEffect, useState, useCallback, useRef, type ChangeEvent } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { generateClient } from 'aws-amplify/data';
 import { uploadData, downloadData } from 'aws-amplify/storage';
+import { fetchAuthSession } from 'aws-amplify/auth';
 import { Toaster, toast } from 'sonner';
 import { ResumeProvider, useResume, type ResumeData } from './context/ResumeContext';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import CV from './components/CV';
+import CVClassic from './components/CVClassic';
 import AuthPage from './components/AuthPage';
 import ErrorBoundary from './components/ErrorBoundary';
-import Sidebar from './components/Sidebar';
+import Sidebar, { WIDTH_OPEN, WIDTH_CLOSED } from './components/Sidebar';
 import ProfilePage from './pages/ProfilePage';
 import AdminPage from './pages/AdminPage';
+import DirectoryPage from './pages/DirectoryPage';
+import MyCvsPage from './pages/MyCvsPage';
+import CvAgent from './components/CvAgent';
+import MultiPageWrapper from './components/MultiPageWrapper';
+import type { CvMeta } from './pages/MyCvsPage';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
 import workerSrc from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import type { Schema } from '../amplify/data/resource';
+import { DN_COLORS } from './theme/tokens';
+import { ThemeProvider } from './context/ThemeContext';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerSrc as string;
 
 const client = generateClient<Schema>();
 
-const P = '#7B2882';
+const P = DN_COLORS.primary;
 
-// ── Scale badge ───────────────────────────────────────────────────────────────
-function ScaleBadge({ scale }: { scale: number }) {
-  if (scale >= 0.999) return null;
-  const pct = Math.round(scale * 100);
-  const color = pct >= 90 ? '#f59e0b' : '#ef4444';
+// ── Page count badge ──────────────────────────────────────────────────────────
+function PageBadge({ pageCount }: { pageCount: number }) {
+  if (pageCount <= 1) return null;
+  const color = pageCount <= 2 ? '#6B7280' : pageCount <= 3 ? '#f59e0b' : '#ef4444';
   return (
     <span style={{
       background: '#F9FAFB', border: `1px solid ${color}`,
       color: color, borderRadius: '10px',
       padding: '2px 9px', fontSize: '11px', fontWeight: 600,
     }}>
-      PDF : {pct}%
+      {pageCount} pages
     </span>
   );
 }
 
-// ── Scale helpers ─────────────────────────────────────────────────────────────
-function getElements() {
-  return {
-    page:    document.querySelector('.cv-page') as HTMLElement | null,
-    wrapper: document.getElementById('cv-wrapper') as HTMLElement | null,
-  };
-}
-function applyScale() {
-  const { page, wrapper } = getElements();
-  if (!page || !wrapper) return 1;
-  page.style.removeProperty('transform');
-  page.style.removeProperty('transform-origin');
-  wrapper.style.removeProperty('height');
-  wrapper.style.removeProperty('overflow');
-  void page.offsetHeight;
-  const a4H = page.offsetWidth * (297 / 210);
-  const contentH = page.scrollHeight;
-  if (contentH <= a4H) return 1;
-  const s = (a4H * 0.97) / contentH;
-  page.style.transform = `scale(${s})`;
-  page.style.transformOrigin = 'top center';
-  wrapper.style.height = `${contentH * s}px`;
-  wrapper.style.overflow = 'hidden';
-  return s;
-}
-function resetScale() {
-  const { page, wrapper } = getElements();
-  page?.style.removeProperty('transform');
-  page?.style.removeProperty('transform-origin');
-  if (wrapper) { wrapper.style.removeProperty('height'); wrapper.style.removeProperty('overflow'); }
-}
+// ── Print helpers ─────────────────────────────────────────────────────────────
+// Multi-page: no scaling needed, CSS page breaks handle pagination
 
 // ── Usage badge ──────────────────────────────────────────────────────────────
 function UsageBadge() {
   const [usage, setUsage] = useState<{ invocationsRemaining: number; invocationsLimit: number } | null>(null);
   useEffect(() => {
-    void client.queries.getUsage({}).then(({ data: result }) => {
-      if (result) setUsage(JSON.parse(result) as { invocationsRemaining: number; invocationsLimit: number });
-    }).catch(() => {});
+    void (async () => {
+      try {
+        const iid = await getIdentityId();
+        const { data: result } = await client.queries.getUsage({ identityId: iid });
+        if (result) setUsage(JSON.parse(result) as { invocationsRemaining: number; invocationsLimit: number });
+      } catch { /* ignore */ }
+    })();
   }, []);
   if (!usage) return null;
   const color = usage.invocationsRemaining === 0 ? '#ef4444' : usage.invocationsRemaining <= 2 ? '#f59e0b' : '#6B7280';
@@ -93,15 +76,18 @@ function UsageBadge() {
 
 // ── CvToolbar ─────────────────────────────────────────────────────────────────
 function CvToolbar({
-  printScale, onPrint, onSave, saveLoading,
+  pageCount, onPrint, onSave, saveLoading,
 }: {
-  printScale: number; onPrint: () => void;
+  pageCount: number; onPrint: () => void;
   onSave: () => void; saveLoading: boolean;
 }) {
-  const { editMode, setEditMode, downloadJSON, resetData, loadData } = useResume();
+  const { editMode, setEditMode, downloadJSON, resetData, loadData, data, update } = useResume();
   const fileRef = useRef<HTMLInputElement>(null);
   const pdfRef  = useRef<HTMLInputElement>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
+  const theme = data.settings?.theme || 'dn';
+  const showLogo = data.settings?.showLogo ?? true;
+  const accentColor = data.settings?.accentColor || P;
 
   const handlePdfImport = async (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -169,9 +155,9 @@ function CvToolbar({
     <button
       onClick={onClick} disabled={opts?.disabled} title={opts?.title}
       style={{
-        background: opts?.active ? P : 'white',
-        color: opts?.active ? 'white' : '#374151',
-        border: '1px solid #E5E7EB',
+        background: opts?.active ? P : 'var(--dn-surface)',
+        color: opts?.active ? 'white' : 'var(--dn-text)',
+        border: '1px solid var(--dn-divider)',
         padding: '7px 14px', borderRadius: '8px',
         fontWeight: 600, fontSize: '13px',
         cursor: opts?.disabled ? 'wait' : 'pointer',
@@ -187,25 +173,25 @@ function CvToolbar({
 
   return (
     <div className="no-print" style={{
-      background: 'white',
+      background: 'var(--dn-surface)',
       display: 'flex', alignItems: 'center', justifyContent: 'space-between',
       padding: '12px 24px',
-      borderBottom: '1px solid #E5E7EB',
+      borderBottom: '1px solid var(--dn-divider)',
       fontFamily: "'Inter', sans-serif",
       flexWrap: 'wrap' as const, gap: '8px',
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
         <button onClick={() => setEditMode(!editMode)} style={{
-          background: editMode ? P : 'white',
-          color: editMode ? 'white' : '#374151',
-          border: editMode ? 'none' : '1px solid #E5E7EB',
+          background: editMode ? P : 'var(--dn-surface)',
+          color: editMode ? 'white' : 'var(--dn-text)',
+          border: editMode ? 'none' : '1px solid var(--dn-divider)',
           padding: '7px 14px', borderRadius: '8px',
           fontWeight: 600, fontSize: '13px', cursor: 'pointer',
           fontFamily: 'inherit',
         }}>
           {editMode ? 'Terminer' : 'Modifier'}
         </button>
-        <ScaleBadge scale={printScale} />
+        <PageBadge pageCount={pageCount} />
       </div>
 
       <div style={{ display: 'flex', gap: '6px', alignItems: 'center', flexWrap: 'wrap' as const }}>
@@ -222,86 +208,223 @@ function CvToolbar({
         <UsageBadge />
 
         <button onClick={resetData} title="Réinitialiser" style={{
-          background: 'white', color: '#9CA3AF',
-          border: '1px solid #E5E7EB',
+          background: 'var(--dn-surface)', color: 'var(--dn-text-secondary)',
+          border: '1px solid var(--dn-divider)',
           padding: '7px 10px', borderRadius: '8px',
           fontSize: '13px', cursor: 'pointer', fontFamily: 'inherit',
         }}>↺</button>
+      </div>
+
+      {/* ── Theme / Logo / Color controls ── */}
+      <div style={{
+        width: '100%', display: 'flex', alignItems: 'center', gap: '12px',
+        paddingTop: '8px', borderTop: '1px solid var(--dn-divider)', flexWrap: 'wrap',
+      }}>
+        <span style={{ fontSize: '11px', color: 'var(--dn-text-secondary)', fontWeight: 600 }}>Mise en page :</span>
+        {[
+          { id: 'dn', label: 'Decision Network' },
+          { id: 'classic', label: 'Classic (sidebar)' },
+        ].map(t => (
+          <button key={t.id} onClick={() => update(d => {
+            if (!d.settings) d.settings = { theme: 'dn', showLogo: true, accentColor: DN_COLORS.primary, hiddenSections: [''] };
+            d.settings.theme = t.id;
+          })} style={{
+            padding: '4px 10px', borderRadius: '6px', fontSize: '11px', fontWeight: 600,
+            cursor: 'pointer', fontFamily: 'inherit', transition: 'all 0.15s',
+            background: theme === t.id ? accentColor : 'var(--dn-surface)',
+            color: theme === t.id ? 'white' : 'var(--dn-text-secondary)',
+            border: theme === t.id ? 'none' : '1px solid var(--dn-divider)',
+          }}>
+            {t.label}
+          </button>
+        ))}
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--dn-divider)' }} />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--dn-text-secondary)', cursor: 'pointer', fontWeight: 600 }}>
+          <input type="checkbox" checked={showLogo}
+            onChange={e => update(d => {
+              if (!d.settings) d.settings = { theme: 'dn', showLogo: true, accentColor: DN_COLORS.primary, hiddenSections: [''] };
+              d.settings.showLogo = e.target.checked;
+            })}
+            style={{ accentColor }} />
+          Logo
+        </label>
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--dn-divider)' }} />
+
+        <label style={{ display: 'flex', alignItems: 'center', gap: '5px', fontSize: '11px', color: 'var(--dn-text-secondary)', fontWeight: 600 }}>
+          Couleur
+          <input type="color" value={accentColor}
+            onChange={e => update(d => {
+              if (!d.settings) d.settings = { theme: 'dn', showLogo: true, accentColor: DN_COLORS.primary, hiddenSections: [''] };
+              d.settings.accentColor = e.target.value;
+            })}
+            style={{ width: '24px', height: '24px', border: '1px solid var(--dn-divider)', borderRadius: '4px', cursor: 'pointer', padding: 0 }} />
+        </label>
+        {[DN_COLORS.primary, '#C0392B', '#2563EB', '#059669', '#D97706', '#1F2937'].map(c => (
+          <button key={c} onClick={() => update(d => {
+            if (!d.settings) d.settings = { theme: 'dn', showLogo: true, accentColor: DN_COLORS.primary, hiddenSections: [''] };
+            d.settings.accentColor = c;
+          })} title={c} style={{
+            width: '20px', height: '20px', borderRadius: '50%', border: accentColor === c ? '2px solid var(--dn-text)' : '2px solid transparent',
+            background: c, cursor: 'pointer', padding: 0, flexShrink: 0,
+          }} />
+        ))}
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--dn-divider)' }} />
+
+        <span style={{ fontSize: '11px', color: 'var(--dn-text-secondary)', fontWeight: 600 }}>Sections :</span>
+        {[
+          { id: 'summary', label: 'Profil' },
+          { id: 'profile', label: 'Profil tech.' },
+          { id: 'skills', label: 'Compétences' },
+          { id: 'education', label: 'Formations' },
+          { id: 'interests', label: 'Intérêts' },
+        ].map(s => {
+          const hiddenSections = data.settings?.hiddenSections || [];
+          const visible = !hiddenSections.includes(s.id);
+          return (
+            <label key={s.id} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: visible ? 'var(--dn-text-secondary)' : 'var(--dn-divider)', cursor: 'pointer', fontWeight: 600 }}>
+              <input type="checkbox" checked={visible}
+                onChange={() => update(d => {
+                  if (!d.settings) d.settings = { theme: 'dn', showLogo: true, accentColor: DN_COLORS.primary, hiddenSections: [] };
+                  if (!d.settings.hiddenSections) d.settings.hiddenSections = [];
+                  const idx = d.settings.hiddenSections.indexOf(s.id);
+                  if (idx >= 0) d.settings.hiddenSections.splice(idx, 1);
+                  else d.settings.hiddenSections.push(s.id);
+                })}
+                style={{ accentColor }} />
+              {s.label}
+            </label>
+          );
+        })}
       </div>
     </div>
   );
 }
 
+// ── helpers for multi-CV S3 ──────────────────────────────────────────────────
+async function getIdentityId(): Promise<string> {
+  const session = await fetchAuthSession();
+  return session.identityId!;
+}
+
+async function loadCvIndex(identityId: string): Promise<CvMeta[]> {
+  try {
+    const res = await downloadData({ path: `private/${identityId}/cv-index.json` }).result;
+    return JSON.parse(await res.body.text()) as CvMeta[];
+  } catch { return []; }
+}
+
+async function saveCvIndex(identityId: string, index: CvMeta[]) {
+  await uploadData({
+    path: `private/${identityId}/cv-index.json`,
+    data: JSON.stringify(index, null, 2),
+    options: { contentType: 'application/json' },
+  }).result;
+}
+
 // ── CvPage ───────────────────────────────────────────────────────────────────
 function CvPage() {
+  const { cvId } = useParams<{ cvId: string }>();
+  const navigate = useNavigate();
   const { data, loadData } = useResume();
-  const [printScale, setPrintScale] = useState(1);
+  const [pageCount, setPageCount] = useState(1);
   const [saveLoading, setSaveLoading] = useState(false);
   const [cloudLoaded, setCloudLoaded] = useState(false);
+  const identityIdRef = useRef('');
+  const [cvName, setCvName] = useState('');
+  const [cvNameLoaded, setCvNameLoaded] = useState(false);
+  const cvNameRef = useRef(cvName);
+  cvNameRef.current = cvName;
 
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
-        const res = await downloadData({
-          path: ({ identityId }) => `private/${identityId}/resume.json`,
-        }).result;
-        if (cancelled) return;
-        const text = await res.body.text();
-        const parsed = JSON.parse(text) as ResumeData;
-        loadData(parsed);
-      } catch { /* no S3 file or invalid JSON → keep defaults */ }
+        const iid = await getIdentityId();
+        identityIdRef.current = iid;
+
+        if (cvId) {
+          // Load specific CV by ID
+          const res = await downloadData({ path: `private/${iid}/cvs/${cvId}.json` }).result;
+          if (cancelled) return;
+          const parsed = JSON.parse(await res.body.text()) as ResumeData;
+          loadData(parsed);
+          // Load name from index
+          const index = await loadCvIndex(iid);
+          const meta = index.find(c => c.id === cvId);
+          setCvName(meta?.name || 'Sans titre');
+          setCvNameLoaded(true);
+        } else {
+          // Legacy fallback: redirect to /my-cvs
+          navigate('/my-cvs', { replace: true });
+          return;
+        }
+      } catch {
+        toast.error('CV introuvable');
+        navigate('/my-cvs', { replace: true });
+        return;
+      }
       finally { if (!cancelled) setCloudLoaded(true); }
     })();
     return () => { cancelled = true; };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [cvId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const saveCvName = useCallback(async (newName: string) => {
+    if (!cvId || !newName.trim()) return;
+    try {
+      const iid = identityIdRef.current || await getIdentityId();
+      const index = await loadCvIndex(iid);
+      const exists = index.some(c => c.id === cvId);
+      let updated: CvMeta[];
+      if (exists) {
+        updated = index.map(c => c.id === cvId ? { ...c, name: newName.trim() } : c);
+      } else {
+        const now = new Date().toISOString();
+        updated = [...index, { id: cvId, name: newName.trim(), createdAt: now, updatedAt: now }];
+      }
+      await saveCvIndex(iid, updated);
+    } catch { /* silent — will be saved with next full save */ }
+  }, [cvId]);
 
   const handleSave = useCallback(async () => {
+    if (!cvId) return;
     setSaveLoading(true);
     try {
+      const iid = identityIdRef.current || await getIdentityId();
+      // Save CV data
       await uploadData({
-        path: ({ identityId }) => `private/${identityId}/resume.json`,
+        path: `private/${iid}/cvs/${cvId}.json`,
         data: JSON.stringify(data, null, 2),
         options: { contentType: 'application/json' },
       }).result;
+      // Update updatedAt + name in index (add entry if missing)
+      const index = await loadCvIndex(iid);
+      const now = new Date().toISOString();
+      const currentName = cvNameRef.current;
+      const exists = index.some(c => c.id === cvId);
+      let updated: CvMeta[];
+      if (exists) {
+        updated = index.map(c => c.id === cvId ? { ...c, name: currentName || c.name, updatedAt: now } : c);
+      } else {
+        updated = [...index, { id: cvId, name: currentName || 'CV sans nom', createdAt: now, updatedAt: now }];
+      }
+      await saveCvIndex(iid, updated);
       toast.success('CV sauvegardé !');
     } catch (err) {
       toast.error(`Erreur sauvegarde : ${err instanceof Error ? err.message : err}`);
     } finally {
       setSaveLoading(false);
     }
-  }, [data]);
+  }, [data, cvId]);
 
-  const updateBadge = useCallback(() => {
-    const page = document.querySelector('.cv-page') as HTMLElement | null;
-    if (!page) return;
-    const a4H = page.offsetWidth * (297 / 210);
-    const h = page.scrollHeight;
-    setPrintScale(h > a4H ? (a4H * 0.97) / h : 1);
+  const handlePageCountChange = useCallback((count: number) => {
+    setPageCount(count);
   }, []);
 
-  useEffect(() => {
-    const t = setTimeout(updateBadge, 60);
-    const page = document.querySelector('.cv-page');
-    const obs = new ResizeObserver(updateBadge);
-    if (page) obs.observe(page);
-    return () => { clearTimeout(t); obs.disconnect(); };
-  }, [data, updateBadge]);
-
-  useEffect(() => {
-    const before = () => applyScale();
-    const after  = () => { resetScale(); updateBadge(); };
-    window.addEventListener('beforeprint', before);
-    window.addEventListener('afterprint', after);
-    return () => {
-      window.removeEventListener('beforeprint', before);
-      window.removeEventListener('afterprint', after);
-    };
-  }, [updateBadge]);
-
   const handlePrint = () => {
-    applyScale();
-    void document.getElementById('cv-wrapper')?.offsetHeight;
     setTimeout(() => window.print(), 60);
   };
 
@@ -319,8 +442,42 @@ function CvPage() {
 
   return (
     <>
+      {/* CV name bar */}
+      {cvNameLoaded && (
+        <div className="no-print" style={{
+          background: 'var(--dn-surface)', borderBottom: '1px solid var(--dn-divider)',
+          padding: '8px 24px', display: 'flex', alignItems: 'center', gap: '12px',
+          fontFamily: "'Inter', sans-serif",
+        }}>
+          <button onClick={() => navigate('/my-cvs')} style={{
+            background: 'none', border: '1px solid var(--dn-divider)', borderRadius: '6px',
+            padding: '4px 10px', fontSize: '12px', color: 'var(--dn-text-secondary)',
+            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+            flexShrink: 0,
+          }}>
+            ← Mes CVs
+          </button>
+          <input
+            value={cvName}
+            onChange={e => setCvName(e.target.value)}
+            onBlur={() => { if (!cvName.trim()) setCvName('Sans titre'); void saveCvName(cvName.trim() || 'Sans titre'); }}
+            onKeyDown={e => { if (e.key === 'Enter') e.currentTarget.blur(); }}
+            spellCheck={false}
+            style={{
+              fontSize: '13px', fontWeight: 700, color: 'var(--dn-text)',
+              background: 'transparent', border: '1px solid transparent',
+              borderRadius: '6px', padding: '4px 8px',
+              fontFamily: 'inherit', outline: 'none',
+              transition: 'border-color 0.15s, background 0.15s',
+              minWidth: '120px', flex: 1,
+            }}
+            onFocus={e => { e.currentTarget.style.borderColor = 'var(--dn-divider)'; e.currentTarget.style.background = 'var(--dn-surface)'; }}
+            onBlurCapture={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent'; }}
+          />
+        </div>
+      )}
       <CvToolbar
-        printScale={printScale}
+        pageCount={pageCount}
         onPrint={handlePrint}
         onSave={() => { void handleSave(); }}
         saveLoading={saveLoading}
@@ -329,30 +486,57 @@ function CvPage() {
         paddingTop: '24px', paddingBottom: '40px',
         display: 'flex', justifyContent: 'center',
       }}>
-        <div id="cv-wrapper"><CV /></div>
+        <div id="cv-wrapper">
+          <MultiPageWrapper
+            onPageCountChange={handlePageCountChange}
+            accentColor={data.settings?.accentColor || P}
+            footerText={data.personal?.website || ''}
+          >
+            {(data.settings?.theme || 'dn') === 'classic' ? <CVClassic /> : <CV />}
+          </MultiPageWrapper>
+        </div>
       </div>
+      <CvAgent />
     </>
   );
 }
 
 // ── Main layout (authenticated) ──────────────────────────────────────────────
 function MainLayout() {
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar-collapsed') === 'true'; } catch { return false; }
+  });
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed(prev => {
+      const next = !prev;
+      try { localStorage.setItem('sidebar-collapsed', String(next)); } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
+
+  const sidebarWidth = sidebarCollapsed ? WIDTH_CLOSED : WIDTH_OPEN;
+
   return (
     <ResumeProvider>
       <div style={{ display: 'flex', minHeight: '100vh' }}>
-        <Sidebar />
+        <Sidebar collapsed={sidebarCollapsed} onToggle={toggleSidebar} />
         <main style={{
-          marginLeft: '220px', flex: 1, background: '#F3F4F6',
+          marginLeft: `${sidebarWidth}px`, flex: 1, background: 'var(--dn-bg)',
           fontFamily: "'Inter', sans-serif",
+          transition: 'margin-left 0.2s',
         }}>
           <Routes>
-            <Route path="/" element={<CvPage />} />
+            <Route path="/" element={<MyCvsPage />} />
+            <Route path="/my-cvs" element={<MyCvsPage />} />
+            <Route path="/cv/:cvId" element={<CvPage />} />
             <Route path="/profile" element={
               <div style={{ padding: '32px' }}><ProfilePage /></div>
             } />
             <Route path="/admin" element={
               <div style={{ padding: '32px' }}><AdminPage /></div>
             } />
+            <Route path="/directory" element={<DirectoryPage />} />
           </Routes>
         </main>
       </div>
@@ -368,7 +552,7 @@ function AuthLayout() {
     return (
       <div style={{
         minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
-        background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)`,
+        background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, ${DN_COLORS.primaryLight} 100%)`,
       }}>
         <div style={{ color: 'rgba(255,255,255,0.6)', fontFamily: "'Inter', sans-serif", fontSize: '14px' }}>
           Chargement…
@@ -384,7 +568,7 @@ function AuthLayout() {
   return (
     <div style={{
       minHeight: '100vh',
-      background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, #9B3AA8 100%)`,
+      background: `linear-gradient(135deg, #2D0B3E 0%, ${P} 55%, ${DN_COLORS.primaryLight} 100%)`,
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: "'Inter', sans-serif", padding: '24px',
       position: 'relative' as const, overflow: 'hidden',
@@ -400,17 +584,19 @@ function AuthLayout() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <BrowserRouter>
-        <AuthProvider>
-          <Toaster
-            position="top-right"
-            toastOptions={{
-              style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' },
-            }}
-          />
-          <AuthLayout />
-        </AuthProvider>
-      </BrowserRouter>
+      <ThemeProvider>
+        <BrowserRouter>
+          <AuthProvider>
+            <Toaster
+              position="top-right"
+              toastOptions={{
+                style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' },
+              }}
+            />
+            <AuthLayout />
+          </AuthProvider>
+        </BrowserRouter>
+      </ThemeProvider>
     </ErrorBoundary>
   );
 }

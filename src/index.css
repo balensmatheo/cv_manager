@@ -1,14 +1,33 @@
 @import "tailwindcss";
 
+:root {
+  --dn-bg: #f5f3f7;
+  --dn-surface: #ffffff;
+  --dn-text: #1a1a1a;
+  --dn-text-secondary: #667085;
+  --dn-divider: #ebe5ed;
+  --dn-primary: #894991;
+}
+
+.dark {
+  --dn-bg: #0b0b0e;
+  --dn-surface: #15151a;
+  --dn-text: #ededee;
+  --dn-text-secondary: #a3a3ad;
+  --dn-divider: #2a2a32;
+  --dn-primary: #c084fc;
+}
+
 * {
   box-sizing: border-box;
 }
 
 body {
-  background-color: #ddd;
+  background-color: var(--dn-bg);
   font-family: 'Inter', 'Segoe UI', Arial, sans-serif;
   margin: 0;
   padding: 0;
+  color: var(--dn-text);
 }
 
 .cv-page {
@@ -20,15 +39,32 @@ body {
   position: relative;
 }
 
+/* Section-level page-break hints for multi-page CVs */
+.cv-section-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+/* Experience items can break, but prefer not to break mid-mission */
+.cv-exp-block {
+  break-inside: auto;
+  page-break-inside: auto;
+}
+
+.cv-mission-block {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
 /* Edit mode ring */
 .cv-page.edit-active {
-  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.22), 0 0 0 3px #7B2882;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.22), 0 0 0 3px #894991;
 }
 
 /* Editable text hover */
 [contenteditable="true"] {
   outline: none;
-  border-bottom: 1.5px dashed rgba(123, 40, 130, 0.55) !important;
+  border-bottom: 1.5px dashed rgba(137, 73, 145, 0.55) !important;
   cursor: text;
   min-width: 12px;
   display: inline-block;
@@ -36,7 +72,7 @@ body {
 }
 [contenteditable="true"]:hover,
 [contenteditable="true"]:focus {
-  background: rgba(123, 40, 130, 0.06) !important;
+  background: rgba(137, 73, 145, 0.06) !important;
   border-radius: 2px;
 }
 
@@ -71,7 +107,8 @@ body {
     padding: 0 !important;
   }
 
-  .no-print {
+  .no-print,
+  .page-break-marker {
     display: none !important;
   }
 
@@ -82,8 +119,7 @@ body {
     margin: 0 !important;
     box-shadow: none !important;
     border: none !important;
-    page-break-after: avoid;
-    break-after: avoid;
+    overflow: visible !important;
   }
 
   .cv-outer-wrapper {
@@ -111,5 +147,21 @@ body {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;
+  }
+
+  /* Multi-page: section blocks avoid breaking mid-section */
+  .cv-section-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  .cv-mission-block {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+
+  /* Page number overlays: render in print */
+  .cv-page-number {
+    position: absolute;
   }
 }
