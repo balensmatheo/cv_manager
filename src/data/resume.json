@@ -8,14 +8,18 @@
     "email": "prenom.nom@decision-network.eu",
     "phone": "+33 6 XX XX XX XX",
     "linkedin": "linkedin.com/in/prenom-nom",
-    "company": "Decision Network"
+    "company": "Decision Network",
+    "address": "",
+    "driving": ""
   },
+  "hook": "",
   "sections": {
     "summary": "ClipboardList",
     "experiences": "Briefcase",
     "profile": "User",
     "skills": "Wrench",
-    "education": "GraduationCap"
+    "education": "GraduationCap",
+    "interests": "Star"
   },
   "summary": [
     "<b>Compétence clé 1</b>",
@@ -60,5 +64,15 @@
       "degree": "Intitulé du diplôme",
       "school": "Nom de l'école"
     }
-  ]
+  ],
+  "interests": [
+    "Centre d'intérêt 1",
+    "Centre d'intérêt 2"
+  ],
+  "settings": {
+    "theme": "dn",
+    "showLogo": true,
+    "accentColor": "#894991",
+    "hiddenSections": [""]
+  }
 }

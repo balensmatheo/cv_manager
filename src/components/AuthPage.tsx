@@ -9,9 +9,10 @@ import {
   resendSignUpCode,
 } from 'aws-amplify/auth';
 import QRCode from 'qrcode';
+import { DN_COLORS } from '../theme/tokens';
 
-const P = '#7B2882';
-const GRAD = `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`;
+const P = DN_COLORS.primary;
+const GRAD = `linear-gradient(135deg, ${DN_COLORS.primary} 0%, ${DN_COLORS.primaryLight} 100%)`;
 
 type View = 'signIn' | 'signUp' | 'confirmEmail' | 'mfaVerify' | 'mfaSetup';
 
@@ -57,7 +58,7 @@ function Field({
           display: 'block', width: '100%', padding: '11px 14px',
           borderRadius: '10px',
           border: `1.5px solid ${focused ? P : '#E5E7EB'}`,
-          boxShadow: focused ? `0 0 0 3px rgba(123,40,130,0.12)` : 'none',
+          boxShadow: focused ? `0 0 0 3px ${P}20` : 'none',
           fontSize: '14px', fontFamily: "'Inter', sans-serif",
           outline: 'none', color: '#111827',
           background: focused ? '#fff' : '#F9FAFB',
@@ -87,11 +88,11 @@ function PrimaryBtn({ label, onClick, loading }: {
         color: 'white', border: 'none', borderRadius: '10px',
         fontSize: '14px', fontWeight: 700, fontFamily: "'Inter', sans-serif",
         cursor: loading ? 'not-allowed' : 'pointer', marginTop: '10px',
-        boxShadow: loading ? 'none' : '0 4px 14px rgba(123,40,130,0.35)',
+        boxShadow: loading ? 'none' : `0 4px 14px ${P}58`,
         letterSpacing: '0.2px', transition: 'opacity 0.15s',
       }}
     >
-      {loading ? '…' : label}
+      {loading ? '...' : label}
     </button>
   );
 }
@@ -118,7 +119,7 @@ function LinkBtn({ children, onClick }: { children: React.ReactNode; onClick: ()
       color: P, fontSize: '13px', fontWeight: 600, cursor: 'pointer',
       fontFamily: "'Inter', sans-serif",
       textDecoration: 'underline',
-      textDecorationColor: 'rgba(123,40,130,0.35)',
+      textDecorationColor: `${P}58`,
     }}>
       {children}
     </button>
@@ -305,9 +306,9 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: () => v
         {view === 'confirmEmail' && (
           <>
             <p style={{ margin: '0 0 18px', fontSize: '13px', color: '#6B7280', lineHeight: '1.6' }}>
-              Un code à 6 chiffres a été envoyé à{' '}
+              Un code a 6 chiffres a ete envoye a{' '}
               <strong style={{ color: '#374151' }}>{email}</strong>.{' '}
-              Vérifiez votre boîte mail (et les spams).
+              Vérifiez votre boite mail (et les spams).
             </p>
             <Field label="Code de vérification" type="text" value={code} onChange={setCode}
               placeholder="123456" autoFocus />
@@ -324,7 +325,7 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: () => v
             <p style={{ margin: '0 0 18px', fontSize: '13px', color: '#6B7280', lineHeight: '1.6' }}>
               Ouvrez <strong style={{ color: '#374151' }}>Google Authenticator</strong>,{' '}
               <strong style={{ color: '#374151' }}>Authy</strong> ou votre app 2FA et entrez
-              le code à 6 chiffres.
+              le code a 6 chiffres.
             </p>
             <Field label="Code d'authentification" type="text" value={code} onChange={setCode}
               placeholder="123456" autoFocus />
@@ -375,7 +376,7 @@ export default function AuthPage({ onAuthenticated }: { onAuthenticated: () => v
         textAlign: 'center' as const, padding: '16px 28px 20px',
         fontSize: '11px', color: '#D1D5DB',
       }}>
-        © 2026 Decision Network · Réservé aux collaborateurs
+        &copy; 2026 Decision Network &middot; Reserve aux collaborateurs
       </div>
     </div>
   );

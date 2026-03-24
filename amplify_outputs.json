@@ -65,11 +65,59 @@
             }
           }
         },
+        "cvAgent": {
+          "name": "cvAgent",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "cvJson": {
+              "name": "cvJson",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "prompt": {
+              "name": "prompt",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "history": {
+              "name": "history",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false
+            }
+          }
+        },
         "getUsage": {
           "name": "getUsage",
           "isArray": false,
           "type": "String",
-          "isRequired": false
+          "isRequired": false,
+          "arguments": {
+            "identityId": {
+              "name": "identityId",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false
+            }
+          }
+        },
+        "getAllUsage": {
+          "name": "getAllUsage",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "days": {
+              "name": "days",
+              "isArray": false,
+              "type": "Int",
+              "isRequired": false
+            }
+          }
         },
         "listUsers": {
           "name": "listUsers",
@@ -88,6 +136,12 @@
               "isArray": false,
               "type": "String",
               "isRequired": true
+            },
+            "cvId": {
+              "name": "cvId",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false
             }
           }
         }
@@ -112,6 +166,70 @@
               "isRequired": true
             }
           }
+        },
+        "adminConfig": {
+          "name": "adminConfig",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "action": {
+              "name": "action",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "payload": {
+              "name": "payload",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false
+            }
+          }
+        },
+        "sendCvEmail": {
+          "name": "sendCvEmail",
+          "isArray": false,
+          "type": "String",
+          "isRequired": false,
+          "arguments": {
+            "username": {
+              "name": "username",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "cvId": {
+              "name": "cvId",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "cvName": {
+              "name": "cvName",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "recipientEmail": {
+              "name": "recipientEmail",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "senderName": {
+              "name": "senderName",
+              "isArray": false,
+              "type": "String",
+              "isRequired": true
+            },
+            "message": {
+              "name": "message",
+              "isArray": false,
+              "type": "String",
+              "isRequired": false
+            }
+          }
         }
       }
     }
@@ -132,10 +250,27 @@
               "write",
               "delete"
             ]
+          },
+          "private/*": {
+            "groupsadmin": [
+              "get",
+              "list",
+              "write",
+              "delete"
+            ],
+            "groupsuser": [
+              "get",
+              "list",
+              "write",
+              "delete"
+            ]
           }
         }
       }
     ]
   },
-  "version": "1.4"
+  "version": "1.4",
+  "custom": {
+    "cv_agent_stream_url": "https://535scxwt2dyzrsmvslqjxr7oia0vwvut.lambda-url.eu-west-1.on.aws/"
+  }
 }

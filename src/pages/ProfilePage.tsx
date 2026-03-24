@@ -10,9 +10,10 @@ import {
 import QRCode from 'qrcode';
 import { toast } from 'sonner';
 import { Shield, Mail, Calendar, Users } from 'lucide-react';
+import { DN_COLORS } from '../theme/tokens';
 
-const P = '#7B2882';
-const GRAD = `linear-gradient(135deg, ${P} 0%, #9B3AA8 100%)`;
+const P = DN_COLORS.primary;
+const GRAD = `linear-gradient(135deg, ${P} 0%, ${DN_COLORS.primaryLight} 100%)`;
 
 export default function ProfilePage() {
   const { user, isAdmin } = useAuth();

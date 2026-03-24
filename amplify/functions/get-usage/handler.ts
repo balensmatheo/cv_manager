@@ -1,11 +1,10 @@
-import { DynamoDBClient, GetItemCommand } from '@aws-sdk/client-dynamodb';
+import { DynamoDBClient, GetItemCommand, PutItemCommand } from '@aws-sdk/client-dynamodb';
+import { getUserLimits } from '../cv-agent/shared';
 
 const ddb = new DynamoDBClient();
-const DAILY_LIMIT = 5;
-const DAILY_TOKEN_LIMIT = 50_000;
 
 export const handler = async (event: {
-  arguments: Record<string, never>;
+  arguments: { identityId?: string };
   identity?: { sub?: string };
 }): Promise<string> => {
   const userId = event.identity?.sub;
@@ -14,12 +13,27 @@ export const handler = async (event: {
   const tableName = process.env.USAGE_TABLE;
   if (!tableName) throw new Error('USAGE_TABLE manquant');
 
+  // Store identityId mapping if provided
+  const identityId = event.arguments.identityId;
+  if (identityId) {
+    await ddb.send(new PutItemCommand({
+      TableName: tableName,
+      Item: {
+        pk: { S: `identity#${userId}` },
+        sk: { S: 'map' },
+        identityId: { S: identityId },
+      },
+    }));
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   const result = await ddb.send(new GetItemCommand({
     TableName: tableName,
     Key: { pk: { S: `user#${userId}` }, sk: { S: today } },
   }));
+
+  const limits = await getUserLimits(ddb, tableName, userId, 'import');
 
   const invocations = parseInt(result.Item?.invocations?.N || '0');
   const totalTokens = parseInt(result.Item?.totalTokens?.N || '0');
@@ -29,11 +43,11 @@ export const handler = async (event: {
   return JSON.stringify({
     date: today,
     invocations,
-    invocationsLimit: DAILY_LIMIT,
-    invocationsRemaining: Math.max(0, DAILY_LIMIT - invocations),
+    invocationsLimit: limits.dailyLimit,
+    invocationsRemaining: Math.max(0, limits.dailyLimit - invocations),
     totalTokens,
-    tokenLimit: DAILY_TOKEN_LIMIT,
-    tokensRemaining: Math.max(0, DAILY_TOKEN_LIMIT - totalTokens),
+    tokenLimit: limits.dailyTokenLimit,
+    tokensRemaining: Math.max(0, limits.dailyTokenLimit - totalTokens),
     inputTokens,
     outputTokens,
   });

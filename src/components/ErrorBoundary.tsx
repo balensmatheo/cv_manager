@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { DN_COLORS } from '../theme/tokens';
 
 interface Props { children: ReactNode }
 interface State { hasError: boolean; error: string }
@@ -18,7 +19,7 @@ export default class ErrorBoundary extends Component<Props, State> {
         background: '#F9FAFB', fontFamily: "'Inter', sans-serif",
       }}>
         <div style={{ textAlign: 'center', maxWidth: '420px', padding: '24px' }}>
-          <div style={{ fontSize: '48px', marginBottom: '16px' }}>⚠️</div>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>&#9888;&#65039;</div>
           <h2 style={{ fontSize: '18px', color: '#111827', marginBottom: '8px' }}>
             Une erreur est survenue
           </h2>
@@ -29,7 +30,7 @@ export default class ErrorBoundary extends Component<Props, State> {
             onClick={() => window.location.reload()}
             style={{
               padding: '10px 24px',
-              background: 'linear-gradient(135deg, #7B2882 0%, #9B3AA8 100%)',
+              background: `linear-gradient(135deg, ${DN_COLORS.primary} 0%, ${DN_COLORS.primaryLight} 100%)`,
               color: 'white', border: 'none', borderRadius: '10px',
               fontWeight: 600, fontSize: '14px', cursor: 'pointer',
             }}

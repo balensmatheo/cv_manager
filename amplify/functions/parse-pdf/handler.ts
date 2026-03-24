@@ -1,33 +1,65 @@
 import { BedrockRuntimeClient, InvokeModelCommand } from '@aws-sdk/client-bedrock-runtime';
 import { DynamoDBClient, GetItemCommand, UpdateItemCommand } from '@aws-sdk/client-dynamodb';
+import { getUserLimits } from '../cv-agent/shared';
 
 const MODEL_ID = 'eu.anthropic.claude-haiku-4-5-20251001-v1:0';
-const DAILY_LIMIT = 5;
-const DAILY_TOKEN_LIMIT = 50_000;
 
 const bedrock = new BedrockRuntimeClient();
 const ddb = new DynamoDBClient();
 
-const SYSTEM_PROMPT = `Tu es un expert en parsing de CV. Extrais les informations du texte fourni et retourne UNIQUEMENT un objet JSON brut (sans markdown, sans explication, sans balises de code).
+const SYSTEM_PROMPT = `Tu es un expert en parsing de CV. Extrais TOUTES les informations du texte fourni et retourne UNIQUEMENT un objet JSON brut (sans markdown, sans explication, sans balises de code).
 
-Structure JSON attendue :
+Structure JSON EXACTE à retourner :
 {
-  "personal": { "firstName", "lastName", "title" (intitulé poste), "subtitle" (stack ex: "React / Node.js"), "website", "email", "phone", "linkedin", "company" },
-  "sections": { "summary": "ClipboardList", "experiences": "Briefcase", "profile": "User", "skills": "Wrench", "education": "GraduationCap" },
-  "summary": ["<b>Compétence clé</b>", ...],
-  "experiences": [{ "id" (slug), "title", "client", "startDate", "endDate", "missions": [{ "id", "name", "tasks": [], "tools" }] }],
-  "profileSkills": [{ "name", "level" (1-5, incréments 0.5) }],
-  "skills": [{ "name", "details" }],
-  "education": [{ "years", "degree", "school" }]
+  "personal": {
+    "firstName": "string",
+    "lastName": "string",
+    "title": "intitulé du poste actuel ou recherché",
+    "subtitle": "stack technique ou spécialités séparées par /",
+    "website": "url du site web si trouvé, sinon vide",
+    "email": "adresse email",
+    "phone": "numéro de téléphone",
+    "linkedin": "url ou identifiant LinkedIn",
+    "company": "nom de l'entreprise actuelle",
+    "address": "adresse ou ville si mentionnée",
+    "driving": "permis et/ou véhicule si mentionné (ex: Permis B - Véhiculé)"
+  },
+  "hook": "phrase d'accroche / objectif professionnel / résumé du profil en 1-3 phrases si présent dans le CV",
+  "sections": { "summary": "ClipboardList", "experiences": "Briefcase", "profile": "User", "skills": "Wrench", "education": "GraduationCap", "interests": "Heart" },
+  "summary": ["<b>Compétence clé 1</b>", "<b>Compétence clé 2</b>"],
+  "experiences": [{
+    "id": "slug-url-safe",
+    "title": "intitulé du poste",
+    "client": "nom du client ou entreprise",
+    "startDate": "mois année",
+    "endDate": "mois année ou Aujourd'hui",
+    "missions": [{
+      "id": "slug-url-safe",
+      "name": "nom de la mission ou du projet",
+      "tasks": ["description tâche 1", "description tâche 2"],
+      "tools": "outil1, outil2, outil3"
+    }]
+  }],
+  "profileSkills": [{ "name": "COMPÉTENCE", "level": 3.5 }],
+  "skills": [{ "name": "Nom compétence", "details": "détails ou sous-compétences" }],
+  "education": [{ "years": "20XX – 20XX", "degree": "intitulé diplôme", "school": "nom école" }],
+  "interests": ["centre d'intérêt 1", "centre d'intérêt 2"]
 }
 
-Règles :
-- "sections" : garder EXACTEMENT les valeurs indiquées (noms d'icônes)
-- "summary" : balises <b>...</b> autorisées pour les termes importants
-- IDs : slugs URL-safe (minuscules, tirets)
-- Champs absents : string vide ou tableau vide
+Règles STRICTES :
+- "sections" : copier EXACTEMENT les valeurs ci-dessus (noms d'icônes Lucide)
+- "summary" : 3-5 points clés du profil, balises <b>...</b> sur les termes importants
+- "hook" : phrase d'accroche, objectif ou profil si présent. Si absent, chaîne vide ""
+- "experiences" : ordonnées de la plus récente à la plus ancienne. Regrouper les missions par poste/client
+- "profileSkills" : compétences avec niveau de 1 à 5 (incréments 0.5). Évaluer le niveau selon l'expérience décrite
+- "skills" : compétences techniques ou métier structurées par domaine
+- "interests" : loisirs, centres d'intérêt, bénévolat, sport si mentionnés. Si absent, tableau vide []
+- "address" / "driving" : extraire si mentionnés, sinon chaîne vide ""
+- IDs : slugs URL-safe (minuscules, tirets, pas d'accents)
+- Champs introuvables : string vide "" ou tableau vide []
 - "company" : "Decision Network" si trouvé, sinon chaîne vide
-- Retourner UNIQUEMENT le JSON brut`;
+- NE PAS inventer d'informations absentes du CV
+- Retourner UNIQUEMENT le JSON brut, rien d'autre`;
 
 export const handler = async (event: {
   arguments: { pdfText: string };
@@ -53,10 +85,12 @@ export const handler = async (event: {
   const currentInvocations = parseInt(usage.Item?.invocations?.N || '0');
   const currentTokens = parseInt(usage.Item?.totalTokens?.N || '0');
 
-  if (currentInvocations >= DAILY_LIMIT) {
-    throw new Error(`Limite quotidienne atteinte (${DAILY_LIMIT} conversions/jour). Réessayez demain.`);
+  const limits = await getUserLimits(ddb, tableName, userId, 'import');
+
+  if (currentInvocations >= limits.dailyLimit) {
+    throw new Error(`Limite quotidienne atteinte (${limits.dailyLimit} conversions/jour). Réessayez demain.`);
   }
-  if (currentTokens >= DAILY_TOKEN_LIMIT) {
+  if (currentTokens >= limits.dailyTokenLimit) {
     throw new Error('Budget token journalier épuisé. Réessayez demain.');
   }
 
@@ -71,7 +105,7 @@ export const handler = async (event: {
       anthropic_version: 'bedrock-2023-05-31',
       system: SYSTEM_PROMPT,
       messages: [{ role: 'user', content: [{ type: 'text', text: `Parse ce CV :\n\n${trimmed}` }] }],
-      max_tokens: 4096,
+      max_tokens: 8192,
       temperature: 0,
     }),
   }));

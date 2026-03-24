@@ -36,5 +36,3 @@ Toutes les données sont dans **`src/data/resume.json`** :
 ```bash
 npm run build
 ```
-
-Le dossier `dist/` contient le site statique déployable sur Netlify / GitHub Pages.

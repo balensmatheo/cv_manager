@@ -20,8 +20,10 @@ function clone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj));
 }
 
-export function ResumeProvider({ children }: { children: ReactNode }) {
+export function ResumeProvider({ children, initialData }: { children: ReactNode; initialData?: ResumeData }) {
+  const isReadOnly = !!initialData;
   const [data, setData] = useState<ResumeData>(() => {
+    if (initialData) return clone(initialData);
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
       return saved ? JSON.parse(saved) : clone(defaultData);
@@ -36,10 +38,10 @@ export function ResumeProvider({ children }: { children: ReactNode }) {
     setData(prev => {
       const next = clone(prev);
       updater(next);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+      if (!isReadOnly) localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
       return next;
     });
-  }, []);
+  }, [isReadOnly]);
 
   const resetData = useCallback(() => {
     if (!window.confirm('Réinitialiser toutes les données du CV ?')) return;
@@ -51,8 +53,8 @@ export function ResumeProvider({ children }: { children: ReactNode }) {
   const loadData = useCallback((raw: ResumeData) => {
     const fresh = clone(raw);
     setData(fresh);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-  }, []);
+    if (!isReadOnly) localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
+  }, [isReadOnly]);
 
   const downloadJSON = useCallback(() => {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });

@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, type CSSProperties, type ReactNode } from 'react';
 import DOMPurify from 'dompurify';
 import { useResume } from '../context/ResumeContext';
+import { DN_COLORS } from '../theme/tokens';
 
 const sanitize = (html: string) =>
   DOMPurify.sanitize(html, { ALLOWED_TAGS: ['b', 'i', 'u', 'strong', 'em', 'br', 'span'], ALLOWED_ATTR: ['style'] });
@@ -86,7 +87,7 @@ export function EditableList({ items, onChangeItem, onAddItem, onRemoveItem, ren
               onClick={() => onRemoveItem(i)}
               title="Supprimer"
               style={{ color: '#cc3333', fontSize: '13px', background: 'none', border: 'none', cursor: 'pointer', padding: '0 2px', marginTop: '1px', flexShrink: 0 }}
-            >✕</button>
+            >&#10005;</button>
           )}
         </div>
       ))}
@@ -95,9 +96,9 @@ export function EditableList({ items, onChangeItem, onAddItem, onRemoveItem, ren
           <button
             onClick={onAddItem}
             style={{
-              fontSize: '9.5px', color: '#7B2882',
-              background: 'rgba(123,40,130,0.07)',
-              border: '1px dashed #7B2882',
+              fontSize: '9.5px', color: DN_COLORS.primary,
+              background: `${DN_COLORS.primary}12`,
+              border: `1px dashed ${DN_COLORS.primary}`,
               borderRadius: '4px', padding: '2px 8px', cursor: 'pointer',
             }}
           >

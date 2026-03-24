@@ -19,7 +19,7 @@ export const handler = async (event: {
   identity?: { claims?: Record<string, unknown> };
 }): Promise<string> => {
   const groups = event.identity?.claims?.['cognito:groups'];
-  const isAdmin = Array.isArray(groups) && groups.includes('admin');
+  const isAdmin = Array.isArray(groups) && groups.includes('ADMINS');
   if (!isAdmin) throw new Error('Non autorisé : accès admin requis');
 
   const userPoolId = process.env.USER_POOL_ID;

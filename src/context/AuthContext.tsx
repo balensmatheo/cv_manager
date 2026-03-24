@@ -71,7 +71,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   return (
     <AuthContext.Provider value={{
       user,
-      isAdmin: user?.groups.includes('admin') ?? false,
+      isAdmin: user?.groups.includes('ADMINS') ?? false,
       loading,
       signOut,
       refreshUser: loadUser,
