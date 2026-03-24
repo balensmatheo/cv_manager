@@ -17,6 +17,9 @@ import DirectoryPage from './pages/DirectoryPage';
 import MyCvsPage from './pages/MyCvsPage';
 import CvAgent from './components/CvAgent';
 import MultiPageWrapper from './components/MultiPageWrapper';
+import ShareCvDialog from './components/ShareCvDialog';
+import SharedCvPage from './pages/SharedCvPage';
+import VersionHistory from './components/VersionHistory';
 import type { CvMeta } from './pages/MyCvsPage';
 import * as pdfjsLib from 'pdfjs-dist';
 import type { TextItem } from 'pdfjs-dist/types/src/display/api';
@@ -338,6 +341,7 @@ function CvPage() {
   const [cvNameLoaded, setCvNameLoaded] = useState(false);
   const cvNameRef = useRef(cvName);
   cvNameRef.current = cvName;
+  const [showShare, setShowShare] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -394,15 +398,26 @@ function CvPage() {
     setSaveLoading(true);
     try {
       const iid = identityIdRef.current || await getIdentityId();
+      const now = new Date().toISOString();
+      const jsonStr = JSON.stringify(data, null, 2);
+
       // Save CV data
       await uploadData({
         path: `private/${iid}/cvs/${cvId}.json`,
-        data: JSON.stringify(data, null, 2),
+        data: jsonStr,
         options: { contentType: 'application/json' },
       }).result;
+
+      // Save version snapshot (fire-and-forget, non-blocking)
+      const versionTs = now.replace(/[:.]/g, '-');
+      uploadData({
+        path: `private/${iid}/cvs/${cvId}/versions/${versionTs}.json`,
+        data: jsonStr,
+        options: { contentType: 'application/json' },
+      }).result.catch(() => { /* version save failure is non-critical */ });
+
       // Update updatedAt + name in index (add entry if missing)
       const index = await loadCvIndex(iid);
-      const now = new Date().toISOString();
       const currentName = cvNameRef.current;
       const exists = index.some(c => c.id === cvId);
       let updated: CvMeta[];
@@ -412,7 +427,7 @@ function CvPage() {
         updated = [...index, { id: cvId, name: currentName || 'CV sans nom', createdAt: now, updatedAt: now }];
       }
       await saveCvIndex(iid, updated);
-      toast.success('CV sauvegardé !');
+      toast.success('CV sauvegarde !');
     } catch (err) {
       toast.error(`Erreur sauvegarde : ${err instanceof Error ? err.message : err}`);
     } finally {
@@ -474,8 +489,18 @@ function CvPage() {
             onFocus={e => { e.currentTarget.style.borderColor = 'var(--dn-divider)'; e.currentTarget.style.background = 'var(--dn-surface)'; }}
             onBlurCapture={e => { e.currentTarget.style.borderColor = 'transparent'; e.currentTarget.style.background = 'transparent'; }}
           />
+          <button onClick={() => setShowShare(true)} style={{
+            background: 'none', border: '1px solid var(--dn-divider)', borderRadius: '6px',
+            padding: '4px 10px', fontSize: '12px', color: P,
+            cursor: 'pointer', fontFamily: 'inherit', fontWeight: 600,
+            flexShrink: 0, display: 'flex', alignItems: 'center', gap: '4px',
+          }}>
+            Partager
+          </button>
+          {cvId && <VersionHistory cvId={cvId} />}
         </div>
       )}
+      {showShare && cvId && <ShareCvDialog cvId={cvId} onClose={() => setShowShare(false)} />}
       <CvToolbar
         pageCount={pageCount}
         onPrint={handlePrint}
@@ -586,15 +611,20 @@ export default function App() {
     <ErrorBoundary>
       <ThemeProvider>
         <BrowserRouter>
-          <AuthProvider>
-            <Toaster
-              position="top-right"
-              toastOptions={{
-                style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' },
-              }}
-            />
-            <AuthLayout />
-          </AuthProvider>
+          <Toaster
+            position="top-right"
+            toastOptions={{
+              style: { fontFamily: "'Inter', sans-serif", fontSize: '13px' },
+            }}
+          />
+          <Routes>
+            <Route path="/shared/:token" element={<SharedCvPage />} />
+            <Route path="/*" element={
+              <AuthProvider>
+                <AuthLayout />
+              </AuthProvider>
+            } />
+          </Routes>
         </BrowserRouter>
       </ThemeProvider>
     </ErrorBoundary>

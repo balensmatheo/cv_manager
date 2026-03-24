@@ -16,6 +16,8 @@ import { getUserCvFunction } from './functions/get-user-cv/resource';
 import { promoteUserFunction } from './functions/promote-user/resource';
 import { adminConfigFunction } from './functions/admin-config/resource';
 import { sendCvEmailFunction } from './functions/send-cv-email/resource';
+import { createShareLinkFunction } from './functions/create-share-link/resource';
+import { getSharedCvFunction } from './functions/get-shared-cv/resource';
 
 const backend = defineBackend({
   auth,
@@ -31,6 +33,8 @@ const backend = defineBackend({
   promoteUserFunction,
   adminConfigFunction,
   sendCvEmailFunction,
+  createShareLinkFunction,
+  getSharedCvFunction,
 });
 
 const userPoolId = backend.auth.resources.userPool.userPoolId;
@@ -195,3 +199,39 @@ sendCvEmailLambda.addEnvironment('USER_POOL_ID', userPoolId);
 sendCvEmailLambda.addEnvironment('USAGE_TABLE', usageTable.tableName);
 sendCvEmailLambda.addEnvironment('BUCKET_NAME', bucketName);
 sendCvEmailLambda.addEnvironment('SENDER_EMAIL', 'noreply@decision-network.com');
+
+// ── createShareLink: DynamoDB read/write ─────────────────────────────────────
+const createShareLinkLambda = backend.createShareLinkFunction.resources.lambda as LambdaFunction;
+usageTable.grantReadWriteData(createShareLinkLambda);
+createShareLinkLambda.addEnvironment('USAGE_TABLE', usageTable.tableName);
+
+// ── getSharedCv: DynamoDB read + S3 read (public, via Function URL) ──────────
+const getSharedCvLambda = backend.getSharedCvFunction.resources.lambda as LambdaFunction;
+usageTable.grantReadData(getSharedCvLambda);
+getSharedCvLambda.addToRolePolicy(new PolicyStatement({
+  effect: Effect.ALLOW,
+  actions: ['s3:GetObject'],
+  resources: [`${bucketArn}/*`],
+}));
+getSharedCvLambda.addEnvironment('USAGE_TABLE', usageTable.tableName);
+getSharedCvLambda.addEnvironment('BUCKET_NAME', bucketName);
+
+const sharedCvFnUrl = getSharedCvLambda.addFunctionUrl({
+  authType: FunctionUrlAuthType.NONE,
+  cors: {
+    allowedOrigins: ['*'],
+    allowedHeaders: ['*'],
+    allowedMethods: [HttpMethod.ALL],
+  },
+});
+
+new CfnOutput(backend.data.resources.graphqlApi.stack, 'SharedCvUrl', {
+  value: sharedCvFnUrl.url,
+  description: 'Shared CV public Function URL',
+});
+
+backend.addOutput({
+  custom: {
+    shared_cv_url: sharedCvFnUrl.url,
+  },
+});

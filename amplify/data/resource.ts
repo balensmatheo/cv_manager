@@ -8,6 +8,7 @@ import { getUserCvFunction } from '../functions/get-user-cv/resource';
 import { promoteUserFunction } from '../functions/promote-user/resource';
 import { adminConfigFunction } from '../functions/admin-config/resource';
 import { sendCvEmailFunction } from '../functions/send-cv-email/resource';
+import { createShareLinkFunction } from '../functions/create-share-link/resource';
 
 const schema = a.schema({
   parsePdf: a
@@ -79,6 +80,17 @@ const schema = a.schema({
     .returns(a.string())
     .authorization((allow) => [allow.group('ADMINS')])
     .handler(a.handler.function(sendCvEmailFunction)),
+
+  createShareLink: a
+    .mutation()
+    .arguments({
+      cvId: a.string().required(),
+      expiresInDays: a.integer(),
+    })
+    .returns(a.string())
+    .authorization((allow) => [allow.authenticated()])
+    .handler(a.handler.function(createShareLinkFunction)),
+
 });
 
 export type Schema = ClientSchema<typeof schema>;
