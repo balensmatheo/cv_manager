@@ -18,6 +18,7 @@ import MyCvsPage from './pages/MyCvsPage';
 import CvAgent from './components/CvAgent';
 import MultiPageWrapper from './components/MultiPageWrapper';
 import ShareCvDialog from './components/ShareCvDialog';
+import { CONTACT_FIELDS, useContactVisibility } from './components/ContactFields';
 import SharedCvPage from './pages/SharedCvPage';
 import VersionHistory from './components/VersionHistory';
 import type { CvMeta } from './pages/MyCvsPage';
@@ -85,6 +86,7 @@ function CvToolbar({
   onSave: () => void; saveLoading: boolean;
 }) {
   const { editMode, setEditMode, downloadJSON, resetData, loadData, data, update } = useResume();
+  const { isRemoved: isContactRemoved, setRemoved: setContactRemoved } = useContactVisibility();
   const fileRef = useRef<HTMLInputElement>(null);
   const pdfRef  = useRef<HTMLInputElement>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -299,6 +301,21 @@ function CvToolbar({
                 })}
                 style={{ accentColor }} />
               {s.label}
+            </label>
+          );
+        })}
+
+        <div style={{ width: '1px', height: '20px', background: 'var(--dn-divider)' }} />
+
+        <span style={{ fontSize: '11px', color: 'var(--dn-text-secondary)', fontWeight: 600 }}>Contact :</span>
+        {CONTACT_FIELDS.map(f => {
+          const kept = !isContactRemoved(f.key);
+          return (
+            <label key={f.key} style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: kept ? 'var(--dn-text-secondary)' : 'var(--dn-divider)', cursor: 'pointer', fontWeight: 600 }}>
+              <input type="checkbox" checked={kept}
+                onChange={() => setContactRemoved(f.key, kept)}
+                style={{ accentColor }} />
+              {f.label}
             </label>
           );
         })}

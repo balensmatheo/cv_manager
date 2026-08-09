@@ -11,6 +11,7 @@ import { EditableText, EditableList } from './Editable';
 import { SortableList } from './SortableList';
 import { FormatToolbar } from './FormatToolbar';
 import ColumnDivider, { useColumnSplit } from './ColumnDivider';
+import { CONTACT_FIELDS, ContactHideBtn, useContactVisibility } from './ContactFields';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   Briefcase, User, Wrench, GraduationCap, ClipboardList,
@@ -117,8 +118,12 @@ export default function CVClassic() {
   const showLogo = data.settings?.showLogo ?? true;
   const hidden = data.settings?.hiddenSections || [];
   const isHidden = (s: string) => hidden.includes(s);
+  const { isVisible } = useContactVisibility();
   const bodyRef = useRef<HTMLDivElement>(null);
   const leftPct = useColumnSplit(32);
+
+  // The contact card disappears once every line has been removed
+  const hasContact = CONTACT_FIELDS.some(f => isVisible(f.key, personal[f.key] || ''));
 
   return (
     <>
@@ -156,44 +161,50 @@ export default function CVClassic() {
             </div>
 
             {/* Contact */}
-            <div style={{ marginBottom: '18px', fontSize: '9px', color: '#444', background: 'white', borderRadius: '8px', padding: '10px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
-              {(personal.email || editMode) && (
+            {hasContact && <div style={{ marginBottom: '18px', fontSize: '9px', color: '#444', background: 'white', borderRadius: '8px', padding: '10px 12px', boxShadow: '0 1px 4px rgba(0,0,0,0.04)' }}>
+              {isVisible('email', personal.email) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
                   <Mail size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.email} onChange={v => update(d => { d.personal.email = v; })} />
+                  <ContactHideBtn field="email" />
                 </div>
               )}
-              {(personal.phone || editMode) && (
+              {isVisible('phone', personal.phone) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
                   <Phone size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.phone} onChange={v => update(d => { d.personal.phone = v; })} />
+                  <ContactHideBtn field="phone" />
                 </div>
               )}
-              {(personal.website || editMode) && (
+              {isVisible('website', personal.website) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
                   <Globe size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.website} onChange={v => update(d => { d.personal.website = v; })} />
+                  <ContactHideBtn field="website" />
                 </div>
               )}
-              {(personal.linkedin || editMode) && (
+              {isVisible('linkedin', personal.linkedin) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
                   <Linkedin size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.linkedin} onChange={v => update(d => { d.personal.linkedin = v; })} />
+                  <ContactHideBtn field="linkedin" />
                 </div>
               )}
-              {(personal.address || editMode) && (
+              {isVisible('address', personal.address) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '5px' }}>
                   <MapPin size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.address || ''} onChange={v => update(d => { d.personal.address = v; })} />
+                  <ContactHideBtn field="address" />
                 </div>
               )}
-              {(personal.driving || editMode) && (
+              {isVisible('driving', personal.driving) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <Car size={11} color={accent} style={{ flexShrink: 0 }} />
                   <EditableText value={personal.driving || ''} onChange={v => update(d => { d.personal.driving = v; })} />
+                  <ContactHideBtn field="driving" />
                 </div>
               )}
-            </div>
+            </div>}
 
             {/* Profile / Summary */}
             {!isHidden('summary') && <div className="cv-section-block" style={{ marginBottom: '16px' }}>
@@ -477,7 +488,7 @@ export default function CVClassic() {
             </div>
 
             {/* Footer */}
-            {(personal.website || editMode) && (
+            {isVisible('website', personal.website) && (
               <div style={{ borderTop: `1px solid ${accent}`, paddingTop: '6px', textAlign: 'center', color: accent, fontSize: '8.5px', letterSpacing: '0.04em', marginTop: '8px' }}>
                 <EditableText value={personal.website} onChange={v => update(d => { d.personal.website = v; })} />
               </div>

@@ -9,6 +9,7 @@ import { EditableText, EditableList } from './Editable';
 import { SortableList } from './SortableList';
 import { FormatToolbar } from './FormatToolbar';
 import ColumnDivider, { useColumnSplit } from './ColumnDivider';
+import { ContactHideBtn, useContactVisibility } from './ContactFields';
 import { DN_COLORS } from '../theme/tokens';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
@@ -212,8 +213,21 @@ export default function CV() {
   const showLogo = data.settings?.showLogo ?? true;
   const hidden = data.settings?.hiddenSections || [];
   const isHidden = (s: string) => hidden.includes(s);
+  const { isVisible } = useContactVisibility();
   const bodyRef = useRef<HTMLDivElement>(null);
   const leftPct = useColumnSplit(59);
+
+  // Contact lines kept by the user, rendered inline and separated by ·
+  const inlineContacts = ([
+    { key: 'email'   as const, el: <EditableText value={personal.email}   onChange={v => update(d => { d.personal.email = v; })} /> },
+    { key: 'phone'   as const, el: <EditableText value={personal.phone}   onChange={v => update(d => { d.personal.phone = v; })} /> },
+    { key: 'website' as const, el: <EditableText value={personal.website} onChange={v => update(d => { d.personal.website = v; })} /> },
+  ]).filter(f => isVisible(f.key, personal[f.key]));
+
+  const locationContacts = ([
+    { key: 'address' as const, el: <EditableText value={personal.address || ''} onChange={v => update(d => { d.personal.address = v; })} /> },
+    { key: 'driving' as const, el: <EditableText value={personal.driving || ''} onChange={v => update(d => { d.personal.driving = v; })} /> },
+  ]).filter(f => isVisible(f.key, personal[f.key]));
 
   return (
     <>
@@ -236,22 +250,29 @@ export default function CV() {
               <EditableText value={personal.lastName} onChange={v => update(d => { d.personal.lastName = v; })} />
             </div>
             <div style={{ color: '#777', fontSize: '8.5px', marginTop: '4px', letterSpacing: '0.02em', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
-              {(personal.email || editMode) && <EditableText value={personal.email} onChange={v => update(d => { d.personal.email = v; })} />}
-              {(personal.email || editMode) && (personal.phone || editMode) && <span style={{ color: '#ccc' }}>·</span>}
-              {(personal.phone || editMode) && <EditableText value={personal.phone} onChange={v => update(d => { d.personal.phone = v; })} />}
-              {(personal.phone || editMode) && (personal.website || editMode) && <span style={{ color: '#ccc' }}>·</span>}
-              {(personal.website || editMode) && <EditableText value={personal.website} onChange={v => update(d => { d.personal.website = v; })} />}
+              {inlineContacts.map((f, i) => (
+                <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                  {i > 0 && <span style={{ color: '#ccc' }}>·</span>}
+                  {f.el}
+                  <ContactHideBtn field={f.key} />
+                </span>
+              ))}
             </div>
-            {(personal.linkedin || editMode) && (
-              <div style={{ color: P, fontSize: '8.5px', marginTop: '1px', letterSpacing: '0.02em', textAlign: 'right', opacity: 0.8 }}>
+            {isVisible('linkedin', personal.linkedin) && (
+              <div style={{ color: P, fontSize: '8.5px', marginTop: '1px', letterSpacing: '0.02em', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px', opacity: 0.8 }}>
                 <EditableText value={personal.linkedin} onChange={v => update(d => { d.personal.linkedin = v; })} />
+                <ContactHideBtn field="linkedin" />
               </div>
             )}
-            {((personal.address || personal.driving) || editMode) && (
+            {locationContacts.length > 0 && (
               <div style={{ color: '#999', fontSize: '8px', marginTop: '2px', display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '6px' }}>
-                {(personal.address || editMode) && <EditableText value={personal.address || ''} onChange={v => update(d => { d.personal.address = v; })} />}
-                {(personal.address || editMode) && (personal.driving || editMode) && <span style={{ color: '#ccc' }}>·</span>}
-                {(personal.driving || editMode) && <EditableText value={personal.driving || ''} onChange={v => update(d => { d.personal.driving = v; })} />}
+                {locationContacts.map((f, i) => (
+                  <span key={f.key} style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}>
+                    {i > 0 && <span style={{ color: '#ccc' }}>·</span>}
+                    {f.el}
+                    <ContactHideBtn field={f.key} />
+                  </span>
+                ))}
               </div>
             )}
           </div>
@@ -414,7 +435,7 @@ export default function CV() {
             </div>
 
             {/* Footer */}
-            {(personal.website || editMode) && (
+            {isVisible('website', personal.website) && (
               <div style={{ borderTop: `1px solid ${P}`, paddingTop: '6px', textAlign: 'center', color: P, fontSize: '9px', letterSpacing: '0.04em', marginTop: '8px' }}>
                 <EditableText value={personal.website} onChange={v => update(d => { d.personal.website = v; })} />
               </div>
