@@ -17,6 +17,12 @@ const A4_HEIGHT_MM = 297;
 const A4_WIDTH_MM = 210;
 const A4_RATIO = A4_HEIGHT_MM / A4_WIDTH_MM;
 
+// offsetWidth/scrollHeight are integers, so a page whose content fits exactly
+// still measures a fraction of a pixel taller than the page it derives from.
+// Without this tolerance Math.ceil rounds every CV up to one page too many —
+// even an empty one. Expressed as a ratio so it holds at any browser zoom.
+const OVERFLOW_TOLERANCE_RATIO = 0.005;
+
 interface Props {
   children: ReactNode;
   onPageCountChange?: (count: number) => void;
@@ -41,14 +47,16 @@ export default function MultiPageWrapper({
     const cvPage = el.querySelector('.cv-page') as HTMLElement | null;
     if (!cvPage) return;
 
-    const pageW = cvPage.offsetWidth;
+    // getBoundingClientRect keeps the sub-pixel width that offsetWidth rounds away
+    const pageW = cvPage.getBoundingClientRect().width;
     if (pageW === 0) return;
 
     const ph = pageW * A4_RATIO;
     setPageHeight(ph);
 
     const contentH = cvPage.scrollHeight;
-    const count = Math.max(1, Math.ceil(contentH / ph));
+    const tolerance = Math.max(2, ph * OVERFLOW_TOLERANCE_RATIO);
+    const count = Math.max(1, Math.ceil((contentH - tolerance) / ph));
     setPageCount(count);
     onPageCountChange?.(count);
   }, [onPageCountChange]);
